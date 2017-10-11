@@ -1,0 +1,7 @@
+apiVersion: "cassandra.database.instaclustr.com/v1beta2"
+kind: "CassandraCluster"
+metadata:
+  name: "example-cassandra-cluster"
+spec:
+  size: 3
+  version: "3.11"

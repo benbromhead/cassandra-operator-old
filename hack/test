@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+if [ -z "${PASSES-}" ]; then
+	PASSES="fmt build e2e e2eslow unit"
+fi
+
+function listPkgs() {
+	go list ./client/... ./cmd/... ./pkg/... ./test/... | grep -v generated
+}
+
+function listFiles() {
+	# pipeline is much faster than for loop
+	listPkgs | xargs -I {} find "${GOPATH}/src/{}" -name '*.go' | grep -v generated
+}
+
+function fmt_pass {
+	if ! "./hack/k8s/codegen/verify-generated.sh"; then
+		exit 1
+	fi
+
+	allfiles=$(listFiles)
+
+	echo "Checking gofmt..."
+	for file in $allfiles; do
+		checkRes=$(gofmt -l -s -d $file)
+		if [ -n "${checkRes}" ]; then
+			echo -e "gofmt checking failed:\n${checkRes}"
+			exit 255
+		fi
+	done
+
+	echo "Checking govet..."
+	for file in $allfiles; do
+		checkRes=$(go vet $file)
+		if [ -n "${checkRes}" ]; then
+			echo -e "go vet checking failed:\n${checkRes}"
+			exit 255
+		fi
+	done
+	
+	go get honnef.co/go/tools/cmd/gosimple || true
+	if which gosimple >/dev/null; then
+		echo "Checking gosimple..."
+		# Generated deepcopy code failed checking... Ignore it at the moment
+		checkRes=$(gosimple `listPkgs | grep -v apis/etcd/v1beta2`) || true
+		if [ -n "${checkRes}" ]; then
+			echo -e "gosimple checking failed:\n${checkRes}"
+			exit 255
+		fi
+	else
+		echo "Skipping gosimple: failed to install"
+	fi
+
+	go get honnef.co/go/tools/cmd/unused || true
+	if which unused >/dev/null; then
+		echo "Checking unused..."
+		checkRes=$(unused `listPkgs`) || true
+		if [ -n "${checkRes}" ]; then
+				echo -e "unused checking failed:\n${checkRes}"
+				exit 255
+		fi
+	else
+		echo "Skipping unused: failed to install"
+	fi
+}
+
+function build_backup_operator  {
+	if ! "hack/build/etcd-backup-operator/build" ; then
+		echo "fail to build etcd-backup-operator"
+		exit 255
+	fi
+}
+
+function build_pass {
+	IMAGE=$OPERATOR_IMAGE hack/build/operator/build
+	build_backup_operator
+}
+
+function e2e_pass {
+	: ${TEST_S3_BUCKET:?"Need to set TEST_S3_BUCKET"}
+
+	# TODO: Move the scripts for rbac into test/e2e/utils.go
+	# Enable rbac if present
+	if kubectl --kubeconfig $KUBECONFIG get clusterrole 1> /dev/null ; then
+		source hack/ci/rbac_utils.sh
+		trap rbac_cleanup EXIT
+		# Create role and binding
+		if rbac_setup ; then
+			echo "RBAC setup success! ==="
+		else
+			echo "RBAC setup fail! ==="
+			exit 1
+		fi
+	fi
+
+	# Run all the tests by default
+	E2E_TEST_SELECTOR=${E2E_TEST_SELECTOR:-.*}
+	go test "./test/e2e/" -run "$E2E_TEST_SELECTOR" -timeout 30m --race --kubeconfig $KUBECONFIG --operator-image $OPERATOR_IMAGE --namespace ${TEST_NAMESPACE}
+}
+
+function e2eslow_pass {
+	E2E_TEST_SELECTOR=${E2E_TEST_SELECTOR:-.*}
+	go test "./test/e2e/e2eslow" -run "$E2E_TEST_SELECTOR" -timeout 30m --race \
+		--kubeconfig $KUBECONFIG --operator-image $OPERATOR_IMAGE --namespace ${TEST_NAMESPACE}
+}
+
+function upgrade_pass {
+	# Run all the tests by default
+	UPGRADE_TEST_SELECTOR=${UPGRADE_TEST_SELECTOR:-.*}
+	go test ./test/e2e/upgradetest/ -run "$UPGRADE_TEST_SELECTOR" -timeout 30m --kubeconfig=$KUBECONFIG --kube-ns=$TEST_NAMESPACE \
+		--old-image=$UPGRADE_FROM \
+		--new-image=$UPGRADE_TO
+}
+
+function start_minio {
+	docker_exist
+	if ! command -v mc >/dev/null; then
+		echo "mc not installed"
+		exist 255
+	fi
+	if [ -z "$MINIO_ACCESS_KEY" ] && [ -z "$MINIO_SECRET_KEY" ]; then
+		echo "MINIO_ACCESS_KEY and MINIO_SECRET_KEY env var are not set!"
+		exit 255
+	fi
+
+	# find running minio.
+	RUNNING_MINIO=$(docker ps -q -f ancestor=minio/minio)
+	# if minio isn't running, start it.
+	if [ -z "$RUNNING_MINIO" ]; then
+		docker pull minio/minio
+		docker run -d -p 9000:9000 \
+  			-e "MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY" \
+  			-e "MINIO_SECRET_KEY=$MINIO_SECRET_KEY" \
+  			minio/minio server /export
+		mc config host add myminio http://127.0.0.1:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+		sleep 1s
+		# create test-bucket.
+		mc mb myminio/test-bucket
+	fi
+}
+
+function docker_exist {
+	if ! command -v docker >/dev/null; then
+		echo "docker not installed"
+	fi
+}
+
+function start_azurite {
+	docker_exist
+	# find running azurite.
+	RUNNING_AZURITE_CONTAINER=$(docker ps -q -f ancestor=quay.io/vdice/azurite:git-9236ba3)
+
+	# if azurite isn't running, start it.
+	if [ -z "$RUNNING_AZURITE_CONTAINER" ]; then
+		docker run -d -t -p 10000:10000 quay.io/vdice/azurite:git-9236ba3
+	fi
+}
+
+function unit_pass {
+	start_minio
+	start_azurite
+	# coverage.txt is the combined coverage report consumed by codecov
+	echo "mode: atomic" > coverage.txt
+	TEST_PKGS=$(listPkgs | grep -v e2e)
+	for pkg in $TEST_PKGS
+	do
+		go test -race -covermode=atomic -coverprofile=profile.out $pkg
+		if [ -f profile.out ]; then
+			tail -n +2 profile.out >> coverage.txt
+			rm profile.out
+		fi
+	done
+	# Send reports to codecov, CODECOV_TOKEN env must be present in Jenkins
+	(curl -s https://codecov.io/bash | bash) || true
+}
+
+for p in $PASSES
+do
+	${p}_pass
+done
+
+echo "test success ==="

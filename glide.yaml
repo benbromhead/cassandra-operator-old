@@ -28,3 +28,5 @@ import:
   version: v8.3.1
 - package: golang.org/x/net
 - package: golang.org/x/time
+- package: github.com/gocql/gocql
+- package: github.com/s8sg/go_jolokia

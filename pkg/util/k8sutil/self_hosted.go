@@ -37,21 +37,7 @@ func selfHostedDataDir(ns, name string) string {
 	return path.Join(cassandraVolumeMountDir, ns+"-"+name)
 }
 
-func NewSelfHostedEtcdPod(m *cassandrautil.Member, initialCluster, endpoints []string, clusterName, state, token string, cs api.ClusterSpec, owner metav1.OwnerReference) *v1.Pod {
-	hostDataDir := selfHostedDataDir(m.Namespace, m.Name)
-	commands := fmt.Sprintf("/usr/local/bin/etcd --data-dir=%s --name=%s --initial-advertise-peer-urls=%s "+
-		"--listen-peer-urls=%s --listen-client-urls=%s --advertise-client-urls=%s "+
-		"--initial-cluster=%s --initial-cluster-state=%s",
-		hostDataDir, m.Name, m.PeerURL(), m.ListenPeerURL(), m.ListenClientURL(), m.ClientURL(), strings.Join(initialCluster, ","), state)
-	if m.SecurePeer {
-		commands += fmt.Sprintf(" --peer-client-cert-auth=true --peer-trusted-ca-file=%[1]s/peer-ca.crt --peer-cert-file=%[1]s/peer.crt --peer-key-file=%[1]s/peer.key", peerTLSDir)
-	}
-	if m.SecureClient {
-		commands += fmt.Sprintf(" --client-cert-auth=true --trusted-ca-file=%[1]s/server-ca.crt --cert-file=%[1]s/server.crt --key-file=%[1]s/server.key", serverTLSDir)
-	}
-	if state == "new" {
-		commands += fmt.Sprintf(" --initial-cluster-token=%s", token)
-	}
+func NewSelfHostedCassandraPod(m *cassandrautil.Member, seeds []string, clusterName, state string, cs api.ClusterSpec, owner metav1.OwnerReference) *v1.Pod {
 
 	labels := map[string]string{
 		"app":          "etcd",
@@ -59,28 +45,18 @@ func NewSelfHostedEtcdPod(m *cassandrautil.Member, initialCluster, endpoints []s
 		"etcd_cluster": clusterName,
 	}
 
-	if len(endpoints) > 0 {
-		addMemberCmd := fmt.Sprintf("ETCDCTL_API=3 etcdctl --endpoints=%s member add %s --peer-urls=%s", strings.Join(endpoints, ","), m.Name, m.PeerURL())
-		if m.SecureClient {
-			addMemberCmd += fmt.Sprintf(" --cert=%[1]s/%[2]s --key=%[1]s/%[3]s --cacert=%[1]s/%[4]s",
-				operatorEtcdTLSDir, cassandrautil.CliCertFile, cassandrautil.CliKeyFile, cassandrautil.CliCAFile)
+	seedUrl := ""
+
+	if state == "new" {
+		seedUrl = m.Name
+	} else {
+		if len(seeds) <=2 {
+			seedUrl = strings.Join( seeds, ",")
+		} else {
+			seedUrl = strings.Join(seeds[0:2], ",")
 		}
-		commands = fmt.Sprintf("([ -d %s ] || %s); %s", hostDataDir, addMemberCmd, commands)
 	}
 
-	// When scaling from 1 -> 2 members, if DNS entry is not populated yet, the k8s control plane will go down
-	// and the etcd pod will not have any chance to talk to each other again. We need to make sure DNS entry ready.
-	// TODO: nslookup should timeout if blocked for a while (10s).
-	ft := `
-while ( ! nslookup %s )
-do
-	sleep 3
-done
-%s
-`
-	commands = fmt.Sprintf(ft, m.Addr(), commands)
-	commands = fmt.Sprintf("%s; %s", appendHostsCommands(), commands)
-	commands = fmt.Sprintf("flock %s -c \"%s\"", etcdLockPath, commands)
 	c := cassandraContainer(cs.BaseImage, cs.Version)
 	// On node reboot, there will be two copies of etcd pod: scheduled and checkpointed one.
 	// Checkpointed one will start first. But then the scheduler will detect host port conflict,
@@ -129,6 +105,24 @@ done
 			Secret: &v1.SecretVolumeSource{SecretName: cs.TLS.Static.OperatorSecret},
 		}})
 	}
+
+	c.Env = append(c.Env, v1.EnvVar{
+		Name: "CASSANDRA_CLUSTER_NAME",
+		Value: clusterName,
+	}, v1.EnvVar{
+		Name: "CASSANDRA_DC",
+		Value: "",
+	}, v1.EnvVar{
+		Name: "POD_IP",
+		ValueFrom: &v1.EnvVarSource{
+			FieldRef: &v1.ObjectFieldSelector{
+				FieldPath: "status.podIP",
+			},
+		},
+	}, v1.EnvVar{
+		Name: "CASSANDRA_SEEDS",
+		Value: seedUrl,
+	})
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

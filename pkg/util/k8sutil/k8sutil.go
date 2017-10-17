@@ -26,6 +26,7 @@ import (
 	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
 
+	"github.com/coreos/etcd-operator/pkg/backup/backupapi"
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,7 +38,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // for gcp auth
 	"k8s.io/client-go/rest"
-	"github.com/coreos/etcd-operator/pkg/backup/backupapi"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -114,8 +114,8 @@ func PodWithNodeSelector(p *v1.Pod, ns map[string]string) *v1.Pod {
 func CreateClientService(kubecli kubernetes.Interface, clusterName, ns string, owner metav1.OwnerReference) error {
 	ports := []v1.ServicePort{{
 		Name:       "client",
-		Port:       2379,
-		TargetPort: intstr.FromInt(2379),
+		Port:       9042,
+		TargetPort: intstr.FromInt(9042),
 		Protocol:   v1.ProtocolTCP,
 	}}
 	return createService(kubecli, ClientServiceName(clusterName), clusterName, ns, "", ports, owner)
@@ -128,13 +128,13 @@ func ClientServiceName(clusterName string) string {
 func CreatePeerService(kubecli kubernetes.Interface, clusterName, ns string, owner metav1.OwnerReference) error {
 	ports := []v1.ServicePort{{
 		Name:       "client",
-		Port:       2379,
-		TargetPort: intstr.FromInt(2379),
+		Port:       9042,
+		TargetPort: intstr.FromInt(9042),
 		Protocol:   v1.ProtocolTCP,
 	}, {
 		Name:       "peer",
-		Port:       2380,
-		TargetPort: intstr.FromInt(2380),
+		Port:       7001,
+		TargetPort: intstr.FromInt(7001),
 		Protocol:   v1.ProtocolTCP,
 	}}
 
@@ -211,9 +211,9 @@ func addOwnerRefToObject(o metav1.Object, r metav1.OwnerReference) {
 	o.SetOwnerReferences(append(o.GetOwnerReferences(), r))
 }
 
-func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName, state, token string, cs api.ClusterSpec, owner metav1.OwnerReference) *v1.Pod {
+func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName string, state string, cs api.ClusterSpec, owner metav1.OwnerReference) *v1.Pod {
 	labels := map[string]string{
-		"app":          "cassandra",
+		"app":               "cassandra",
 		"cassandra_node":    m.Name,
 		"cassandra_cluster": clusterName,
 	}
@@ -225,10 +225,15 @@ func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName, state
 	}
 
 	seedUrl := ""
-	if len(seeds) <=2 {
-		seedUrl = strings.Join( seeds, ",")
+
+	if state == "new" {
+		seedUrl = m.Name
 	} else {
-		seedUrl = strings.Join(seeds[0:2], ",")
+		if len(seeds) <= 2 {
+			seedUrl = strings.Join(seeds, ",")
+		} else {
+			seedUrl = strings.Join(seeds[0:1], ",")
+		}
 	}
 
 	volumes := []v1.Volume{
@@ -236,11 +241,17 @@ func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName, state
 	}
 
 	container.Env = append(container.Env, v1.EnvVar{
-		Name: "CASSANDRA_CLUSTER_NAME",
+		Name:  "CASSANDRA_CLUSTER_NAME",
 		Value: clusterName,
 	}, v1.EnvVar{
-		Name: "CASSANDRA_DC",
+		Name:  "CASSANDRA_DC",
 		Value: "",
+	}, v1.EnvVar{
+		Name:  "MAX_HEAP_SIZE",
+		Value: "400M",
+	}, v1.EnvVar{
+		Name:  "HEAP_NEWSIZE",
+		Value: "100M",
 	}, v1.EnvVar{
 		Name: "POD_IP",
 		ValueFrom: &v1.EnvVarSource{
@@ -249,7 +260,7 @@ func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName, state
 			},
 		},
 	}, v1.EnvVar{
-		Name: "CASSANDRA_SEEDS",
+		Name:  "CASSANDRA_SEEDS",
 		Value: seedUrl,
 	})
 
@@ -294,7 +305,6 @@ func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName, state
 			Subdomain: clusterName,
 		},
 	}
-
 
 	applyPodPolicy(clusterName, pod, cs.Pod)
 
@@ -353,7 +363,7 @@ func ClusterListOpt(clusterName string) metav1.ListOptions {
 func LabelsForCluster(clusterName string) map[string]string {
 	return map[string]string{
 		"cassandra_cluster": clusterName,
-		"app":          "cassandra",
+		"app":               "cassandra",
 	}
 }
 

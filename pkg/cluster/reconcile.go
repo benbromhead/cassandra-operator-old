@@ -23,12 +23,11 @@ import (
 	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 
-	//"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes"
 	//"golang.org/x/net/context"
 	"k8s.io/api/core/v1"
 )
-
+//TODO: reconcile against Cassandras own internal state
 // reconcile reconciles cluster current state to desired state specified by spec.
 // - it tries to reconcile the cluster to desired size.
 // - if the cluster needs for upgrade, it tries to upgrade old member one by one.
@@ -41,7 +40,7 @@ func (c *Cluster) reconcile(pods []*v1.Pod) error {
 	}()
 
 	sp := c.cluster.Spec
-	running := podsToMemberSet(pods, c.isSecureClient())
+	running := c.podsToMemberSet(pods, c.isSecureClient())
 	if !running.IsEqual(c.members) || c.members.Size() != sp.Size {
 		return c.reconcileMembers(running)
 	}
@@ -117,25 +116,7 @@ func (c *Cluster) resize() error {
 
 func (c *Cluster) addOneMember() error {
 	c.status.SetScalingUpCondition(c.members.Size(), c.cluster.Spec.Size)
-	//
-	//cfg := clientv3.Config{
-	//	Endpoints:   c.members.ClientURLs(),
-	//	DialTimeout: constants.DefaultDialTimeout,
-	//	TLS:         c.tlsConfig,
-	//}
-	//etcdcli, err := clientv3.New(cfg)
-	//if err != nil {
-	//	return fmt.Errorf("add one member failed: creating etcd client failed %v", err)
-	//}
-	//defer etcdcli.Close()
-	//
 	newMember := c.newMember(c.memberCounter)
-	//ctx, _ := context.WithTimeout(context.Background(), constants.DefaultRequestTimeout)
-	//resp, err := etcdcli.MemberAdd(ctx, []string{newMember.PeerURL()})
-	//if err != nil {
-	//	return fmt.Errorf("fail to add new member (%s): %v", newMember.Name, err)
-	//}
-	//newMember.ID = resp.Member.ID
 	c.members.Add(newMember)
 
 	if err := c.createPod(c.members, newMember, "existing", false); err != nil {
@@ -190,13 +171,14 @@ func (c *Cluster) removeDeadMember(toRemove *cassandrautil.Member) error {
 }
 
 func (c *Cluster) removeMember(toRemove *cassandrautil.Member) error {
-	err := cassandrautil.RemoveMember(c.members.ClientURLs(), c.tlsConfig, toRemove.ID)
+
+	err := cassandrautil.RemoveMember(c.ResolvePodServiceAddress(toRemove.Name))
 	if err != nil {
 		switch err {
 		case rpctypes.ErrMemberNotFound:
-			c.logger.Infof("etcd member (%v) has been removed", toRemove.Name)
+			c.logger.Infof("cassandra node (%v) has been removed", toRemove.Name)
 		default:
-			c.logger.Errorf("fail to remove etcd member (%v): %v", toRemove.Name, err)
+			c.logger.Errorf("fail to remove cassandra node (%v): %v", toRemove.Name, err)
 			return err
 		}
 	}

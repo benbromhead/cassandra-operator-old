@@ -30,7 +30,8 @@ type Member struct {
 	// ID field can be 0, which is unknown ID.
 	// We know the ID of a member when we get the member information from etcd,
 	// but not from Kubernetes pod list.
-	ID uint64
+	ID string
+	ContactPoint string
 
 	Seed bool
 
@@ -131,9 +132,7 @@ func (ms MemberSet) PickOne() *Member {
 func (ms MemberSet) Seeds() []string {
 	ps := make([]string, 0)
 	for _, m := range ms {
-		if m.Seed {
 			ps = append(ps, m.Addr())
-		}
 	}
 	return ps
 }
@@ -154,10 +153,10 @@ func (ms MemberSet) Remove(name string) {
 	delete(ms, name)
 }
 
-func (ms MemberSet) ClientURLs() []string {
+func (ms MemberSet) ClientContactPoints() []string {
 	endpoints := make([]string, 0, len(ms))
 	for _, m := range ms {
-		endpoints = append(endpoints, m.ClientURL())
+		endpoints = append(endpoints, m.Addr())
 	}
 	return endpoints
 }

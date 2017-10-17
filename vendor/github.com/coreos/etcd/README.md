@@ -96,7 +96,7 @@ Every cluster member and proxy accepts key value reads and key value writes.
 
 ### Running etcd on Kubernetes
 
-If you want to run etcd cluster on Kubernetes, try [etcd operator](https://github.com/benbromhead/cassandra-operator).
+If you want to run etcd cluster on Kubernetes, try [etcd operator](https://github.com/coreos/etcd-operator).
 
 ### Next steps
 

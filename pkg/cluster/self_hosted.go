@@ -19,11 +19,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
+	//"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
 
-	"github.com/pborman/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -53,7 +52,25 @@ func (c *Cluster) selectSchedulableNodes() ([]string, error) {
 }
 
 func (c *Cluster) waitNewMember(oldN, retries int, name string) error {
-	return retryutil.Retry(10*time.Second, retries, func() (bool, error) {
+	//TODO: Solve case where bootstrapping is really quick and gets missed by the joining check
+	if oldN >0 {
+		retryutil.Retry(5*time.Second, retries, func() (bool, error){
+			count, err:= c.getJoiningNodes(c.members)
+			if err != nil {
+				c.logger.Warningf("unable to count joining nodes: %v", err)
+				return false, nil
+			}
+			if count > 0 {
+				c.logger.Infof("node is now bootstrapping")
+				return true, nil
+			}
+			c.logger.Infof("still waiting for the new self hosted member (%s) to start...", name)
+			return false, nil
+		})
+	}
+
+	//Check every 5 minutes to see if node has joined, wait a total of 12 hours (large nodes can take a while to join)
+	return retryutil.Retry(5*time.Minute, 72, func() (bool, error) {
 		err := c.updateMembers(c.members)
 		if err != nil {
 			c.logger.Warningf("unable to update members: %v", err)
@@ -62,7 +79,7 @@ func (c *Cluster) waitNewMember(oldN, retries int, name string) error {
 		if c.members.Size() > oldN {
 			return true, nil
 		}
-		c.logger.Infof("still waiting for the new self hosted member (%s) to start...", name)
+		c.logger.Infof("still waiting for node to finish bootstrapping...", name)
 		return false, nil
 	})
 }
@@ -131,11 +148,11 @@ func (c *Cluster) addOneSelfHostedMember() error {
 
 	newMember := c.newMember(c.memberCounter)
 	c.memberCounter++
-	peerURL := newMember.PeerURL()
-	initialCluster := append(c.members.PeerURLPairs(), newMember.Name+"="+peerURL)
+	//peerURL := newMember.PeerURL()
+	//initialCluster := append(c.members.PeerURLPairs(), newMember.Name+"="+peerURL)
 
 	ns := c.cluster.Namespace
-	pod := k8sutil.NewSelfHostedEtcdPod(newMember, initialCluster, c.members.ClientURLs(), c.cluster.Name, "existing", "", c.cluster.Spec, c.cluster.AsOwner())
+	pod := k8sutil.NewSelfHostedCassandraPod(newMember, c.members.Seeds(), c.cluster.Name, "existing", c.cluster.Spec, c.cluster.AsOwner())
 
 	_, err = c.config.KubeCli.CoreV1().Pods(ns).Create(pod)
 	if err != nil {
@@ -161,9 +178,8 @@ func (c *Cluster) addOneSelfHostedMember() error {
 func (c *Cluster) newSelfHostedSeedMember() error {
 	newMember := c.newMember(c.memberCounter)
 	c.memberCounter++
-	initialCluster := []string{newMember.Name + "=" + newMember.PeerURL()}
 
-	pod := k8sutil.NewSelfHostedEtcdPod(newMember, initialCluster, nil, c.cluster.Name, "new", uuid.New(), c.cluster.Spec, c.cluster.AsOwner())
+	pod := k8sutil.NewSelfHostedCassandraPod(newMember, c.members.Seeds(), c.cluster.Name, "new", c.cluster.Spec, c.cluster.AsOwner())
 	_, err := k8sutil.CreateAndWaitPod(c.config.KubeCli, c.cluster.Namespace, pod, 3*60*time.Second)
 	if err != nil {
 		return err
@@ -175,64 +191,64 @@ func (c *Cluster) newSelfHostedSeedMember() error {
 	c.logger.Infof("self-hosted cluster created with seed member (%s)", newMember.Name)
 	return nil
 }
-
-func (c *Cluster) migrateBootMember() error {
-	endpoint := c.cluster.Spec.SelfHosted.BootMemberClientEndpoint
-
-	c.logger.Infof("migrating boot member (%s)", endpoint)
-
-	resp, err := cassandrautil.ListMembers([]string{endpoint}, c.tlsConfig)
-	if err != nil {
-		return fmt.Errorf("failed to list members from boot member (%v)", err)
-	}
-	if len(resp.Members) != 1 {
-		return fmt.Errorf("boot cluster contains more than one member")
-	}
-	bootMember := resp.Members[0]
-
-	initialCluster := make([]string, 0)
-	for _, purl := range bootMember.PeerURLs {
-		initialCluster = append(initialCluster, fmt.Sprintf("%s=%s", bootMember.Name, purl))
-	}
-
-	// create the member inside Kubernetes for migration
-	newMember := c.newMember(c.memberCounter)
-	c.memberCounter++
-
-	peerURL := newMember.PeerURL()
-	initialCluster = append(initialCluster, newMember.Name+"="+peerURL)
-
-	pod := k8sutil.NewSelfHostedEtcdPod(newMember, initialCluster, []string{endpoint}, c.cluster.Name, "existing", "", c.cluster.Spec, c.cluster.AsOwner())
-	ns := c.cluster.Namespace
-	_, err = k8sutil.CreateAndWaitPod(c.config.KubeCli, ns, pod, 3*60*time.Second)
-	if err != nil {
-		return err
-	}
-	if c.isDebugLoggerEnabled() {
-		c.debugLogger.LogPodCreation(pod)
-	}
-
-	if c.cluster.Spec.SelfHosted.SkipBootMemberRemoval {
-		c.logger.Infof("skipping boot member (%s) removal; you will need to remove it yourself", endpoint)
-	} else {
-		c.logger.Infof("beginning the process of removing boot member (%s) from the cluster", endpoint)
-		go func() {
-			// TODO: a shorter timeout?
-			// Waiting here for cluster to get stable:
-			// - etcd data are replicated;
-			// - cluster CR state has switched to "Running"
-			delay := 60 * time.Second
-			c.logger.Infof("waiting %v before removing the boot member", delay)
-			time.Sleep(delay)
-
-			err = cassandrautil.RemoveMember([]string{newMember.ClientURL()}, c.tlsConfig, bootMember.ID)
-			if err != nil {
-				c.logger.Errorf("boot member migration: failed to remove the boot member (%v)", err)
-			}
-		}()
-	}
-
-	c.logger.Infof("self-hosted cluster created with boot member (%s)", endpoint)
-
-	return nil
-}
+//
+//func (c *Cluster) migrateBootMember() error {
+//	endpoint := c.cluster.Spec.SelfHosted.BootMemberClientEndpoint
+//
+//	c.logger.Infof("migrating boot member (%s)", endpoint)
+//
+//	resp, err := cassandrautil.ListMembers([]string{endpoint}, c.tlsConfig)
+//	if err != nil {
+//		return fmt.Errorf("failed to list members from boot member (%v)", err)
+//	}
+//	if len(resp.Members) != 1 {
+//		return fmt.Errorf("boot cluster contains more than one member")
+//	}
+//	bootMember := resp.Members[0]
+//
+//	initialCluster := make([]string, 0)
+//	for _, purl := range bootMember.PeerURLs {
+//		initialCluster = append(initialCluster, fmt.Sprintf("%s=%s", bootMember.Name, purl))
+//	}
+//
+//	// create the member inside Kubernetes for migration
+//	newMember := c.newMember(c.memberCounter)
+//	c.memberCounter++
+//
+//	peerURL := newMember.PeerURL()
+//	initialCluster = append(initialCluster, newMember.Name+"="+peerURL)
+//
+//	pod := k8sutil.NewSelfHostedCassandraPod(newMember, initialCluster, []string{endpoint}, c.cluster.Name, "existing", "", c.cluster.Spec, c.cluster.AsOwner())
+//	ns := c.cluster.Namespace
+//	_, err = k8sutil.CreateAndWaitPod(c.config.KubeCli, ns, pod, 3*60*time.Second)
+//	if err != nil {
+//		return err
+//	}
+//	if c.isDebugLoggerEnabled() {
+//		c.debugLogger.LogPodCreation(pod)
+//	}
+//
+//	if c.cluster.Spec.SelfHosted.SkipBootMemberRemoval {
+//		c.logger.Infof("skipping boot member (%s) removal; you will need to remove it yourself", endpoint)
+//	} else {
+//		c.logger.Infof("beginning the process of removing boot member (%s) from the cluster", endpoint)
+//		go func() {
+//			// TODO: a shorter timeout?
+//			// Waiting here for cluster to get stable:
+//			// - etcd data are replicated;
+//			// - cluster CR state has switched to "Running"
+//			delay := 60 * time.Second
+//			c.logger.Infof("waiting %v before removing the boot member", delay)
+//			time.Sleep(delay)
+//
+//			err = cassandrautil.RemoveMember([]string{newMember.ClientURL()}, c.tlsConfig, bootMember.ID)
+//			if err != nil {
+//				c.logger.Errorf("boot member migration: failed to remove the boot member (%v)", err)
+//			}
+//		}()
+//	}
+//
+//	c.logger.Infof("self-hosted cluster created with boot member (%s)", endpoint)
+//
+//	return nil
+//}

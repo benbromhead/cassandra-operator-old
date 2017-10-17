@@ -15,46 +15,53 @@
 package cluster
 
 import (
-	"fmt"
-	"strings"
+	//"fmt"
+	//"strings"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
+	//api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
-	"github.com/coreos/etcd/etcdserver/etcdserverpb"
-	"github.com/pkg/errors"
+	//"github.com/coreos/etcd/etcdserver/etcdserverpb"
+	//"github.com/pkg/errors"
 
 	"k8s.io/api/core/v1"
+	"github.com/golang/glog"
 )
 
 func (c *Cluster) updateMembers(known cassandrautil.MemberSet) error {
-	resp, err := cassandrautil.ListMembers(known.ClientURLs(), c.tlsConfig)
+
+	resp, err := cassandrautil.GetMemberNodes(c.ResolvePodServiceAddress(known.PickOne().Name))
 	if err != nil {
 		return err
 	}
+
+	podLookup := make(map[string]*cassandrautil.Member)
+
+	for _, p := range known {
+		podLookup[c.ResolvePodServiceAddress(p.Name)] = p
+	}
+
+
 	members := cassandrautil.MemberSet{}
-	for _, m := range resp.Members {
-		name, err := getMemberName(m, c.cluster.GetName(), c.cluster.Spec.SelfHosted)
-		if err != nil {
-			return errors.Wrap(err, "get member name failed")
-		}
-		ct, err := cassandrautil.GetCounterFromMemberName(name)
-		if err != nil {
-			return newFatalError(fmt.Sprintf("get counter from member name (%s) failed: %v", name, err))
-		}
-		if ct+1 > c.memberCounter {
-			c.memberCounter = ct + 1
+	for _, host := range resp {
+		if _, ok := podLookup[host]; ok {
+			members[podLookup[host].Name] = &cassandrautil.Member{
+				Name:         podLookup[host].Name,
+				Namespace:    c.cluster.Namespace,
+				SecurePeer:   c.isSecurePeer(),
+				SecureClient: c.isSecureClient(),
+			}
+		} else {
+			glog.Warning("Detected member of cluster not in pod")
 		}
 
-		members[name] = &cassandrautil.Member{
-			Name:         name,
-			Namespace:    c.cluster.Namespace,
-			ID:           m.ID,
-			SecurePeer:   c.isSecurePeer(),
-			SecureClient: c.isSecureClient(),
-		}
 	}
+	c.memberCounter = len(resp)
 	c.members = members
 	return nil
+}
+func (c *Cluster) getJoiningNodes(known cassandrautil.MemberSet) (int, error) {
+	joining, err := cassandrautil.GetJoiningNodes(known.ClientContactPoints()[0]) //TODO: make array safe
+	return len(joining), err
 }
 
 func (c *Cluster) newMember(id int) *cassandrautil.Member {
@@ -67,35 +74,11 @@ func (c *Cluster) newMember(id int) *cassandrautil.Member {
 	}
 }
 
-func podsToMemberSet(pods []*v1.Pod, sc bool) cassandrautil.MemberSet {
+func (c *Cluster) podsToMemberSet(pods []*v1.Pod, sc bool) cassandrautil.MemberSet {
 	members := cassandrautil.MemberSet{}
 	for _, pod := range pods {
-		m := &cassandrautil.Member{Name: pod.Name, Namespace: pod.Namespace, SecureClient: sc}
+		m := &cassandrautil.Member{Name: pod.Name , Namespace: pod.Namespace, SecureClient: sc}
 		members.Add(m)
 	}
 	return members
-}
-
-func getMemberName(m *etcdserverpb.Member, clusterName string, selfHosted *api.SelfHostedPolicy) (string, error) {
-	if selfHosted != nil {
-		if len(m.Name) == 0 || len(m.ClientURLs) == 0 {
-			return "", newFatalError(fmt.Sprintf("unready self-hosted member (peerURL: %s)", m.PeerURLs[0]))
-		}
-
-		curl := m.ClientURLs[0]
-		if curl == selfHosted.BootMemberClientEndpoint {
-			return "", fmt.Errorf("skipping for self hosted cluster: waiting for the boot member (%s) to be removed...", m.Name)
-		}
-
-		if !strings.HasPrefix(m.Name, clusterName) {
-			return "", newFatalError(fmt.Sprintf("member (%s) does not belong to this cluster", m.Name))
-		}
-		return m.Name, nil
-	}
-
-	name, err := cassandrautil.MemberNameFromPeerURL(m.PeerURLs[0])
-	if err != nil {
-		return "", newFatalError(fmt.Sprintf("invalid member peerURL (%s): %v", m.PeerURLs[0], err))
-	}
-	return name, nil
 }

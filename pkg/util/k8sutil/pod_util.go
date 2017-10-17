@@ -38,8 +38,8 @@ func cassandraVolumeMounts() []v1.VolumeMount {
 func cassandraContainer(baseImage, version string) v1.Container {
 	c := v1.Container{
 		//Command: []string{"/bin/sh", "-ec", commands},
-		Name:    "cassandra",
-		Image:   ImageName(baseImage, version),
+		Name:  "cassandra",
+		Image: ImageName(baseImage, version),
 		Ports: []v1.ContainerPort{
 			{
 				Name:          "intra",
@@ -57,13 +57,17 @@ func cassandraContainer(baseImage, version string) v1.Container {
 				Protocol:      v1.ProtocolTCP,
 			},
 			{
+				Name:          "jolokia",
+				ContainerPort: int32(8778),
+				Protocol:      v1.ProtocolTCP,
+			},
+			{
 				Name:          "cql",
 				ContainerPort: int32(9042),
 				Protocol:      v1.ProtocolTCP,
 			},
 		},
 		VolumeMounts: cassandraVolumeMounts(),
-
 	}
 
 	return c
@@ -71,7 +75,7 @@ func cassandraContainer(baseImage, version string) v1.Container {
 
 func containerWithLivenessProbe(c v1.Container) v1.Container {
 	c.LivenessProbe = cassandraLivenessProbe()
-	c.ReadinessProbe = cassandraReadinessProbe()
+	//c.ReadinessProbe = cassandraReadinessProbe()
 	return c
 }
 
@@ -84,12 +88,12 @@ func cassandraLivenessProbe() *v1.Probe {
 	return &v1.Probe{
 		Handler: v1.Handler{
 			Exec: &v1.ExecAction{
-				Command: []string{"/bin/sh", "-c", "nodetool status"},
+				Command: []string{"/bin/sh", "-c", "nodetool info"},
 			},
 		},
 		InitialDelaySeconds: 90,
-		TimeoutSeconds:      10,
-		PeriodSeconds:       60,
+		TimeoutSeconds:      20,
+		PeriodSeconds:       120,
 		FailureThreshold:    3,
 	}
 }

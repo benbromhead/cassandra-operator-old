@@ -18,64 +18,143 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	"github.com/benbromhead/cassandra-operator/pkg/util/constants"
-	"github.com/coreos/etcd/clientv3"
+	//"github.com/benbromhead/cassandra-operator/pkg/util/constants"
+	//"github.com/coreos/etcd/clientv3"
 
-	"golang.org/x/net/context"
+	//"golang.org/x/net/context"
+	"github.com/gocql/gocql"
+	//"github.com/aws/aws-sdk-go/private/protocol/query"
+	"github.com/swarvanusg/go_jolokia"
+	"github.com/golang/glog"
+	//"github.com/aws/aws-sdk-go/aws/session"
 )
 
-func ListMembers(clientURLs []string, tc *tls.Config) (*clientv3.MemberListResponse, error) {
-	cfg := clientv3.Config{
-		Endpoints:   clientURLs,
-		DialTimeout: constants.DefaultDialTimeout,
-		TLS:         tc,
-	}
-	etcdcli, err := clientv3.New(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("list members failed: creating etcd client failed: %v", err)
-	}
+//TODO: Change this to query Cassandra peer tables
 
-	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultRequestTimeout)
-	resp, err := etcdcli.MemberList(ctx)
-	cancel()
-	etcdcli.Close()
-	return resp, err
+type CassandraMember struct {
+	Peer string
+	DataCenter string
+	HostId string
+	Rack string
+	ReleaseVersion string
+	RPCAddress string
 }
 
-func RemoveMember(clientURLs []string, tc *tls.Config, id uint64) error {
-	cfg := clientv3.Config{
-		Endpoints:   clientURLs,
-		DialTimeout: constants.DefaultDialTimeout,
-		TLS:         tc,
-	}
-	etcdcli, err := clientv3.New(cfg)
+func GetMemberNodes(url string) ([]string, error){
+	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
+	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "HostIdMap")
 	if err != nil {
-		return err
+		glog.Warning("Could not get joining nodes")
 	}
-	defer etcdcli.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultRequestTimeout)
-	_, err = etcdcli.Cluster.MemberRemove(ctx, id)
-	cancel()
+
+	if membernodes, ok := resp.(map[string]interface{}); ok {
+		hosts := make([]string, len(membernodes))
+		for key, _ := range membernodes {
+			hosts = append(hosts, key)
+		}
+		return hosts, nil
+	} else {
+		return nil, fmt.Errorf("could not get joining nodes list from %s: %v", url, err)
+	}
+}
+
+func GetJoiningNodes(url string) ([]string, error){
+	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
+
+	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "JoiningNodes")
+	if err != nil {
+		glog.Warning("Could not get joining nodes")
+	}
+
+	if joiningnodes, ok := resp.([]string); ok {
+		return joiningnodes, nil
+	} else {
+		return nil, fmt.Errorf("could not get joining nodes list from %s: %v", url, err)
+	}
+}
+
+func ListMembers(clientURLs string, tc *tls.Config) ([]*CassandraMember, error) {
+	cluster := gocql.NewCluster(clientURLs)
+	cluster.HostFilter = gocql.WhiteListHostFilter(clientURLs)
+	cluster.ProtoVersion = 4
+	session, err := cluster.CreateSession()
+	if err != nil {
+		return nil, fmt.Errorf("list members failed: creating cassandra driver failed: %v", err)
+	}
+
+	var peer string
+	var dataCenter string
+	var hostId gocql.UUID
+	var preferredIp string
+	var rack string
+	var releaseVersion string
+	var rpcAddress string
+
+
+	query := session.Query("SELECT peer, data_center, host_id, preferred_ip, rack, release_version, rpc_address FROM system.peers")
+	qIter := query.Iter()
+	var members = []*CassandraMember{}
+
+	for qIter.Scan(&peer, &dataCenter, &hostId, &preferredIp, &rack, &releaseVersion, &rpcAddress) {
+		members = append(members, &CassandraMember{
+			Peer: peer,
+			DataCenter:dataCenter,
+			HostId: hostId.String(),
+			Rack:rack,
+			ReleaseVersion:releaseVersion,
+			RPCAddress:rpcAddress,
+		})
+	}
+
+	localquery := session.Query("SELECT broadcast_address, data_center, host_id, rack, release_version, rpc_address FROM system.local")
+	lIter := localquery.Iter()
+
+
+	for lIter.Scan(&peer, &dataCenter, &hostId, &preferredIp, &rack, &releaseVersion, &rpcAddress) {
+		members = append(members, &CassandraMember{
+			Peer: peer,
+			DataCenter:dataCenter,
+			HostId: hostId.String(),
+			Rack:rack,
+			ReleaseVersion:releaseVersion,
+			RPCAddress:rpcAddress,
+		})
+	}
+
+	session.Close()
+	return members, err
+}
+
+func RemoveMember(id string) error {
+	client := go_jolokia.NewJolokiaClient("http://" + id + ":8778/jolokia/")
+
+	_, err := client.ExecuteOperation("org.apache.cassandra.db:type=StorageService", "decommission()", []interface{}{}, "")
+	if err != nil {
+		glog.Warning("Could not decommission node")
+	}
 	return err
 }
 
 func CheckHealth(url string, tc *tls.Config) (bool, error) {
-	cfg := clientv3.Config{
-		Endpoints:   []string{url},
-		DialTimeout: constants.DefaultDialTimeout,
-		TLS:         tc,
-	}
-	etcdcli, err := clientv3.New(cfg)
+	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
+
+	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "LiveNodes")
 	if err != nil {
-		return false, fmt.Errorf("failed to create etcd client for %s: %v", url, err)
+		glog.Warning("Could not reach node, might not be ready")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultRequestTimeout)
-	_, err = etcdcli.Get(ctx, "/", clientv3.WithSerializable())
-	cancel()
-	etcdcli.Close()
+
+	if livenodes, ok := resp.([]string); ok {
+		for _, b := range livenodes {
+			if b == url {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
 	if err != nil {
-		return false, fmt.Errorf("etcd health probing failed for %s: %v", url, err)
+		return false, fmt.Errorf("cassandra health probing failed for %s: %v", url, err)
 	}
 	return true, nil
 }

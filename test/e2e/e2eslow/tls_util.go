@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"os"
 	"testing"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/test/e2e/e2eutil"
 	"github.com/benbromhead/cassandra-operator/test/e2e/framework"
 )
@@ -30,15 +30,15 @@ func TLSTestCommon(t *testing.T, selfHosted bool) {
 	f := framework.Global
 	suffix := fmt.Sprintf("-%d", rand.Uint64())
 	clusterName := "tls-test" + suffix
-	memberPeerTLSSecret := "etcd-peer-tls" + suffix
-	memberClientTLSSecret := "etcd-server-tls" + suffix
-	operatorClientTLSSecret := "etcd-client-tls" + suffix
+	memberPeerTLSSecret := "cassandra-peer-tls" + suffix
+	memberClientTLSSecret := "cassandra-server-tls" + suffix
+	operatorClientTLSSecret := "cassandra-client-tls" + suffix
 
 	err := e2eutil.PreparePeerTLSSecret(clusterName, f.Namespace, memberPeerTLSSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	certsDir, err := ioutil.TempDir("", "etcd-operator-tls-")
+	certsDir, err := ioutil.TempDir("", "cassandra-operator-tls-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TLSTestCommon(t *testing.T, selfHosted bool) {
 
 	_, err = e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, c)
 	if err != nil {
-		t.Fatalf("failed to create 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to create 3 members cassandra cluster: %v", err)
 	}
-	// TODO: use client key/certs to talk to secure etcd cluster.
+	// TODO: use client key/certs to talk to secure cassandra cluster.
 }

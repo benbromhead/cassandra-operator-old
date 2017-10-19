@@ -19,14 +19,14 @@ import (
 	"fmt"
 
 	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
-	//"github.com/benbromhead/cassandra-operator/pkg/util/constants"
 	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 
 	"github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes"
-	//"golang.org/x/net/context"
 	"k8s.io/api/core/v1"
+	"github.com/golang/glog"
 )
+
 //TODO: reconcile against Cassandras own internal state
 // reconcile reconciles cluster current state to desired state specified by spec.
 // - it tries to reconcile the cluster to desired size.
@@ -41,7 +41,12 @@ func (c *Cluster) reconcile(pods []*v1.Pod) error {
 
 	sp := c.cluster.Spec
 	running := c.podsToMemberSet(pods, c.isSecureClient())
-	if !running.IsEqual(c.members) || c.members.Size() != sp.Size {
+
+	contactPoint, _ := c.ResolvePodServiceAddress(c.members.PickOne())
+
+	nodes, err := cassandrautil.GetMemberNodes(contactPoint)
+
+	if !running.IsEqual(c.members) || c.members.Size() != sp.Size || (len(nodes) > sp.Size && err == nil) {
 		return c.reconcileMembers(running)
 	}
 	c.status.ClearCondition(api.ClusterConditionScaling)
@@ -69,9 +74,27 @@ func (c *Cluster) reconcile(pods []*v1.Pod) error {
 // 3. If L = members, the current state matches the membership state. END.
 // 4. If len(L) < len(members)/2 + 1, quorum lost. Go to recovery process.
 // 5. Add one missing member. END.
+
+
 func (c *Cluster) reconcileMembers(running cassandrautil.MemberSet) error {
 	c.logger.Infof("running members: %s", running)
 	c.logger.Infof("cluster membership: %s", c.members)
+
+
+	contactPoint, _ := c.ResolvePodServiceAddress(c.members.PickOne())
+
+	nodes, _ := cassandrautil.GetMemberNodes(contactPoint)
+
+	if(len(nodes) > c.members.Size()) {
+		for _, n := range nodes {
+			if _, err := c.members.FindMemberByIp(n); err != nil {
+				c.removeDeadMember(&cassandrautil.Member{
+					Name: "unknown",
+					IP: n,
+				})
+			}
+		}
+	}
 
 	unknownMembers := running.Diff(c.members)
 	if unknownMembers.Size() > 0 {
@@ -99,6 +122,15 @@ func (c *Cluster) reconcileMembers(running cassandrautil.MemberSet) error {
 }
 
 func (c *Cluster) resize() error {
+	contactPoint, _ := c.ResolvePodServiceAddress(c.members.PickOne())
+	if count, err := cassandrautil.GetJoiningNodes(contactPoint); err == nil && len(count) > 0 {
+		return fmt.Errorf("nodes still joining cluster, waiting for current range movements to finish")
+	}
+
+	if count, err := cassandrautil.GetLeavingNodes(contactPoint); err == nil && len(count) > 0 {
+		return fmt.Errorf("nodes still leaving cluster, waiting for current range movements to finish")
+	}
+
 	if c.members.Size() == c.cluster.Spec.Size {
 		return nil
 	}
@@ -171,17 +203,39 @@ func (c *Cluster) removeDeadMember(toRemove *cassandrautil.Member) error {
 }
 
 func (c *Cluster) removeMember(toRemove *cassandrautil.Member) error {
-
-	err := cassandrautil.RemoveMember(c.ResolvePodServiceAddress(toRemove.Name))
+	someOtherNode := c.members.Diff(cassandrautil.NewMemberSet(toRemove)).PickOne()
+	someOtherNodeIP, _ := c.ResolvePodServiceAddress(someOtherNode)
+	count, err := cassandrautil.GetDownNodesCount(someOtherNodeIP);
 	if err != nil {
-		switch err {
-		case rpctypes.ErrMemberNotFound:
-			c.logger.Infof("cassandra node (%v) has been removed", toRemove.Name)
-		default:
-			c.logger.Errorf("fail to remove cassandra node (%v): %v", toRemove.Name, err)
-			return err
+		return fmt.Errorf("cannot determine if nodes are down", err)
+	}
+	if count == 0 {
+		//We can try decommissioning nodes as no nodes are down
+		if nodeIP, err := c.ResolvePodServiceAddress(toRemove); err == nil {
+			err := cassandrautil.DecommissionMember(nodeIP)
+			if err != nil {
+				switch err {
+				case rpctypes.ErrMemberNotFound:
+					c.logger.Infof("cassandra node (%v) has been removed", toRemove.Name)
+				default:
+					c.logger.Errorf("fail to remove cassandra node (%v): %v", toRemove.Name, err)
+					return err
+				}
+			}
+		} else {
+			return fmt.Errorf("could not look up node IP address to decommission and node is not down, this should not happen")
+		}
+	} else {
+		//TODO: this should probably get removed as it is an unsafe operation
+		if len(toRemove.IP) > 0 {
+			cassandrautil.RemoveNode(someOtherNodeIP, toRemove.IP)
+		} else if nodeIP, err := c.ResolvePodServiceAddress(toRemove); err == nil {
+			cassandrautil.RemoveNode(someOtherNodeIP, nodeIP)
+		} else {
+			glog.Warning("don't know IP of node to remove", toRemove)
 		}
 	}
+
 	c.members.Remove(toRemove.Name)
 	_, err = c.eventsCli.Create(k8sutil.MemberRemoveEvent(toRemove.Name, c.cluster))
 	if err != nil {
@@ -248,7 +302,7 @@ func pickOneOldMember(pods []*v1.Pod, newVersion string) *cassandrautil.Member {
 		if k8sutil.GetEtcdVersion(pod) == newVersion {
 			continue
 		}
-		return &cassandrautil.Member{Name: pod.Name, Namespace: pod.Namespace}
+		return &cassandrautil.Member{Name: pod.Name, Namespace: pod.Namespace, IP: pod.Status.PodIP}
 	}
 	return nil
 }

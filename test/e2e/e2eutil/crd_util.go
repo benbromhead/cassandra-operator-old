@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/pkg/generated/clientset/versioned"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
@@ -36,32 +36,32 @@ type StorageCheckerOptions struct {
 	DeletedFromAPI bool
 }
 
-func CreateCluster(t *testing.T, crClient versioned.Interface, namespace string, cl *api.EtcdCluster) (*api.EtcdCluster, error) {
+func CreateCluster(t *testing.T, crClient versioned.Interface, namespace string, cl *api.CassandraCluster) (*api.CassandraCluster, error) {
 	cl.Namespace = namespace
-	res, err := crClient.EtcdV1beta2().EtcdClusters(namespace).Create(cl)
+	res, err := crClient.CassandraV1beta2().CassandraClusters(namespace).Create(cl)
 	if err != nil {
 		return nil, err
 	}
-	t.Logf("creating etcd cluster: %s", res.Name)
+	t.Logf("creating cassandra cluster: %s", res.Name)
 
 	return res, nil
 }
 
-func UpdateCluster(crClient versioned.Interface, cl *api.EtcdCluster, maxRetries int, updateFunc k8sutil.EtcdClusterCRUpdateFunc) (*api.EtcdCluster, error) {
+func UpdateCluster(crClient versioned.Interface, cl *api.CassandraCluster, maxRetries int, updateFunc k8sutil.EtcdClusterCRUpdateFunc) (*api.CassandraCluster, error) {
 	return AtomicUpdateClusterCR(crClient, cl.Name, cl.Namespace, maxRetries, updateFunc)
 }
 
-func AtomicUpdateClusterCR(crClient versioned.Interface, name, namespace string, maxRetries int, updateFunc k8sutil.EtcdClusterCRUpdateFunc) (*api.EtcdCluster, error) {
-	result := &api.EtcdCluster{}
+func AtomicUpdateClusterCR(crClient versioned.Interface, name, namespace string, maxRetries int, updateFunc k8sutil.EtcdClusterCRUpdateFunc) (*api.CassandraCluster, error) {
+	result := &api.CassandraCluster{}
 	err := retryutil.Retry(1*time.Second, maxRetries, func() (done bool, err error) {
-		etcdCluster, err := crClient.EtcdV1beta2().EtcdClusters(namespace).Get(name, metav1.GetOptions{})
+		cassandraCluster, err := crClient.CassandraV1beta2().CassandraClusters(namespace).Get(name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		updateFunc(etcdCluster)
+		updateFunc(cassandraCluster)
 
-		result, err = crClient.EtcdV1beta2().EtcdClusters(namespace).Update(etcdCluster)
+		result, err = crClient.CassandraV1beta2().CassandraClusters(namespace).Update(cassandraCluster)
 		if err != nil {
 			if apierrors.IsConflict(err) {
 				return false, nil
@@ -73,22 +73,22 @@ func AtomicUpdateClusterCR(crClient versioned.Interface, name, namespace string,
 	return result, err
 }
 
-func DeleteCluster(t *testing.T, crClient versioned.Interface, kubeClient kubernetes.Interface, cl *api.EtcdCluster) error {
-	t.Logf("deleting etcd cluster: %v", cl.Name)
-	err := crClient.EtcdV1beta2().EtcdClusters(cl.Namespace).Delete(cl.Name, nil)
+func DeleteCluster(t *testing.T, crClient versioned.Interface, kubeClient kubernetes.Interface, cl *api.CassandraCluster) error {
+	t.Logf("deleting cassandra cluster: %v", cl.Name)
+	err := crClient.CassandraV1beta2().CassandraClusters(cl.Namespace).Delete(cl.Name, nil)
 	if err != nil {
 		return err
 	}
 	return waitResourcesDeleted(t, kubeClient, cl)
 }
 
-func DeleteClusterAndBackup(t *testing.T, crClient versioned.Interface, kubecli kubernetes.Interface, cl *api.EtcdCluster, checkerOpt StorageCheckerOptions) error {
+func DeleteClusterAndBackup(t *testing.T, crClient versioned.Interface, kubecli kubernetes.Interface, cl *api.CassandraCluster, checkerOpt StorageCheckerOptions) error {
 	err := DeleteCluster(t, crClient, kubecli, cl)
 	if err != nil {
 		return err
 	}
 	t.Logf("waiting backup deleted of cluster (%v)", cl.Name)
-	err = WaitBackupDeleted(kubecli, cl, checkerOpt)
+	//err = WaitBackupDeleted(kubecli, cl, checkerOpt) TODO: fix
 	if err != nil {
 		return fmt.Errorf("fail to wait backup deleted: %v", err)
 	}

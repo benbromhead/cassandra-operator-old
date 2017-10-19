@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The Cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
 package e2e
 
 import (
-	"fmt"
+	//"fmt"
 	"os"
 	"testing"
 	"time"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	//api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
 	"github.com/benbromhead/cassandra-operator/test/e2e/e2eutil"
 	"github.com/benbromhead/cassandra-operator/test/e2e/framework"
@@ -34,29 +34,29 @@ func TestReadyMembersStatus(t *testing.T) {
 	}
 	f := framework.Global
 	size := 1
-	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-etcd-", size))
+	testCassandra, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-Cassandra-", size))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	defer func() {
-		if err := e2eutil.DeleteCluster(t, f.CRClient, f.KubeClient, testEtcd); err != nil {
+		if err := e2eutil.DeleteCluster(t, f.CRClient, f.KubeClient, testCassandra); err != nil {
 			t.Fatal(err)
 		}
 	}()
 
-	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, size, 3, testEtcd); err != nil {
-		t.Fatalf("failed to create %d members etcd cluster: %v", size, err)
+	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, size, 3, testCassandra); err != nil {
+		t.Fatalf("failed to create %d members Cassandra cluster: %v", size, err)
 	}
 
 	err = retryutil.Retry(5*time.Second, 3, func() (done bool, err error) {
-		currEtcd, err := f.CRClient.EtcdV1beta2().EtcdClusters(f.Namespace).Get(testEtcd.Name, metav1.GetOptions{})
+		currCassandra, err := f.CRClient.CassandraV1beta2().CassandraClusters(f.Namespace).Get(testCassandra.Name, metav1.GetOptions{})
 		if err != nil {
 			e2eutil.LogfWithTimestamp(t, "failed to get updated cluster object: %v", err)
 			return false, nil
 		}
-		if len(currEtcd.Status.Members.Ready) != size {
-			e2eutil.LogfWithTimestamp(t, "size of ready members want = %d, get = %d ReadyMembers(%v) UnreadyMembers(%v). Will retry checking ReadyMembers", size, len(currEtcd.Status.Members.Ready), currEtcd.Status.Members.Ready, currEtcd.Status.Members.Unready)
+		if len(currCassandra.Status.Members.Ready) != size {
+			e2eutil.LogfWithTimestamp(t, "size of ready members want = %d, get = %d ReadyMembers(%v) UnreadyMembers(%v). Will retry checking ReadyMembers", size, len(currCassandra.Status.Members.Ready), currCassandra.Status.Members.Ready, currCassandra.Status.Members.Unready)
 			return false, nil
 		}
 		return true, nil
@@ -65,71 +65,71 @@ func TestReadyMembersStatus(t *testing.T) {
 		t.Fatalf("failed to get size of ReadyMembers to reach %d : %v", size, err)
 	}
 }
-
-func TestBackupStatus(t *testing.T) {
-	if os.Getenv(envParallelTest) == envParallelTestTrue {
-		t.Parallel()
-	}
-	f := framework.Global
-
-	bp := e2eutil.NewPVBackupPolicy(true, "")
-	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.ClusterWithBackup(e2eutil.NewCluster("test-etcd-", 1), bp))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		var storageCheckerOptions *e2eutil.StorageCheckerOptions
-		switch testEtcd.Spec.Backup.StorageType {
-		case api.BackupStorageTypePersistentVolume, api.BackupStorageTypeDefault:
-			storageCheckerOptions = &e2eutil.StorageCheckerOptions{}
-		case api.BackupStorageTypeS3:
-			storageCheckerOptions = &e2eutil.StorageCheckerOptions{
-				S3Cli:    f.S3Cli,
-				S3Bucket: f.S3Bucket,
-			}
-		}
-
-		err := e2eutil.DeleteClusterAndBackup(t, f.CRClient, f.KubeClient, testEtcd, *storageCheckerOptions)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	_, err = e2eutil.WaitUntilSizeReached(t, f.CRClient, 1, 6, testEtcd)
-	if err != nil {
-		t.Fatalf("failed to create 1 members etcd cluster: %v", err)
-	}
-	err = e2eutil.WaitBackupPodUp(t, f.KubeClient, f.Namespace, testEtcd.Name, 6)
-	if err != nil {
-		t.Fatalf("failed to create backup pod: %v", err)
-	}
-	err = e2eutil.MakeBackup(f.KubeClient, f.Namespace, testEtcd.Name)
-	if err != nil {
-		t.Fatalf("fail to make backup: %v", err)
-	}
-
-	err = retryutil.Retry(5*time.Second, 6, func() (done bool, err error) {
-		c, err := f.CRClient.EtcdV1beta2().EtcdClusters(f.Namespace).Get(testEtcd.Name, metav1.GetOptions{})
-		if err != nil {
-			t.Fatalf("faied to get cluster spec: %v", err)
-		}
-		bs := c.Status.BackupServiceStatus
-		if bs == nil {
-			e2eutil.LogfWithTimestamp(t, "backup status is nil")
-			return false, nil
-		}
-		// We expect it will make one backup eventually.
-		if bs.Backups < 1 {
-			e2eutil.LogfWithTimestamp(t, "backup number is %v", bs.Backups)
-			return false, nil
-		}
-		if bs.BackupSize == 0 {
-			return false, fmt.Errorf("backupsize = 0, want > 0")
-		}
-		return true, nil
-	})
-
-	if err != nil {
-		t.Error(err)
-	}
-}
+//
+//func TestBackupStatus(t *testing.T) {
+//	if os.Getenv(envParallelTest) == envParallelTestTrue {
+//		t.Parallel()
+//	}
+//	f := framework.Global
+//
+//	bp := e2eutil.NewPVBackupPolicy(true, "")
+//	testCassandra, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.ClusterWithBackup(e2eutil.NewCluster("test-Cassandra-", 1), bp))
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	defer func() {
+//		var storageCheckerOptions *e2eutil.StorageCheckerOptions
+//		switch testCassandra.Spec.Backup.StorageType {
+//		case api.BackupStorageTypePersistentVolume, api.BackupStorageTypeDefault:
+//			storageCheckerOptions = &e2eutil.StorageCheckerOptions{}
+//		case api.BackupStorageTypeS3:
+//			storageCheckerOptions = &e2eutil.StorageCheckerOptions{
+//				S3Cli:    f.S3Cli,
+//				S3Bucket: f.S3Bucket,
+//			}
+//		}
+//
+//		err := e2eutil.DeleteClusterAndBackup(t, f.CRClient, f.KubeClient, testCassandra, *storageCheckerOptions)
+//		if err != nil {
+//			t.Fatal(err)
+//		}
+//	}()
+//
+//	_, err = e2eutil.WaitUntilSizeReached(t, f.CRClient, 1, 6, testCassandra)
+//	if err != nil {
+//		t.Fatalf("failed to create 1 members Cassandra cluster: %v", err)
+//	}
+//	err = e2eutil.WaitBackupPodUp(t, f.KubeClient, f.Namespace, testCassandra.Name, 6)
+//	if err != nil {
+//		t.Fatalf("failed to create backup pod: %v", err)
+//	}
+//	err = e2eutil.MakeBackup(f.KubeClient, f.Namespace, testCassandra.Name)
+//	if err != nil {
+//		t.Fatalf("fail to make backup: %v", err)
+//	}
+//
+//	err = retryutil.Retry(5*time.Second, 6, func() (done bool, err error) {
+//		c, err := f.CRClient.CassandraV1beta2().CassandraClusters(f.Namespace).Get(testCassandra.Name, metav1.GetOptions{})
+//		if err != nil {
+//			t.Fatalf("faied to get cluster spec: %v", err)
+//		}
+//		bs := c.Status.BackupServiceStatus
+//		if bs == nil {
+//			e2eutil.LogfWithTimestamp(t, "backup status is nil")
+//			return false, nil
+//		}
+//		// We expect it will make one backup eventually.
+//		if bs.Backups < 1 {
+//			e2eutil.LogfWithTimestamp(t, "backup number is %v", bs.Backups)
+//			return false, nil
+//		}
+//		if bs.BackupSize == 0 {
+//			return false, fmt.Errorf("backupsize = 0, want > 0")
+//		}
+//		return true, nil
+//	})
+//
+//	if err != nil {
+//		t.Error(err)
+//	}
+//}

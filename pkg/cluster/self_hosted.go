@@ -241,7 +241,7 @@ func (c *Cluster) newSelfHostedSeedMember() error {
 //			c.logger.Infof("waiting %v before removing the boot member", delay)
 //			time.Sleep(delay)
 //
-//			err = cassandrautil.RemoveMember([]string{newMember.ClientURL()}, c.tlsConfig, bootMember.ID)
+//			err = cassandrautil.DecommissionMember([]string{newMember.ClientURL()}, c.tlsConfig, bootMember.ID)
 //			if err != nil {
 //				c.logger.Errorf("boot member migration: failed to remove the boot member (%v)", err)
 //			}

@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,19 +16,19 @@ package e2eutil
 
 import (
 	"bytes"
-	"context"
+	//"context"
 	"fmt"
-	"net/http"
+	//"net/http"
 	"testing"
 	"time"
 
-	"github.com/benbromhead/cassandra-operator/client/experimentalclient"
-	"github.com/benbromhead/cassandra-operator/pkg/util/constants"
+	//"github.com/benbromhead/cassandra-operator/client/experimentalclient"
+	//"github.com/benbromhead/cassandra-operator/pkg/util/constants"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	//"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -53,30 +53,30 @@ func KillMembers(kubecli kubernetes.Interface, namespace string, names ...string
 	return nil
 }
 
-func MakeBackup(kubecli kubernetes.Interface, ns, clusterName string) error {
-	ls := labels.SelectorFromSet(k8sutil.BackupSidecarLabels(clusterName))
-	podList, err := kubecli.CoreV1().Pods(ns).List(metav1.ListOptions{
-		LabelSelector: ls.String(),
-	})
-	if err != nil {
-		return err
-	}
-	if len(podList.Items) < 1 {
-		return fmt.Errorf("no backup pod found")
-	}
-
-	// TODO: We are assuming Kubernetes pod network is accessible from test machine.
-	addr := fmt.Sprintf("%s:%d", podList.Items[0].Status.PodIP, constants.DefaultBackupPodHTTPPort)
-	bc := experimentalclient.NewBackupWithAddr(&http.Client{}, "http", addr)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	err = bc.Request(ctx)
-	if err != nil {
-		return fmt.Errorf("backup pod (%s): %v", podList.Items[0].Name, err)
-	}
-	return nil
-}
+//func MakeBackup(kubecli kubernetes.Interface, ns, clusterName string) error {
+//	ls := labels.SelectorFromSet(k8sutil.BackupSidecarLabels(clusterName))
+//	podList, err := kubecli.CoreV1().Pods(ns).List(metav1.ListOptions{
+//		LabelSelector: ls.String(),
+//	})
+//	if err != nil {
+//		return err
+//	}
+//	if len(podList.Items) < 1 {
+//		return fmt.Errorf("no backup pod found")
+//	}
+//
+//	// TODO: We are assuming Kubernetes pod network is accessible from test machine.
+//	addr := fmt.Sprintf("%s:%d", podList.Items[0].Status.PodIP, constants.DefaultBackupPodHTTPPort)
+//	bc := experimentalclient.NewBackupWithAddr(&http.Client{}, "http", addr)
+//	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+//	defer cancel()
+//
+//	err = bc.Request(ctx)
+//	if err != nil {
+//		return fmt.Errorf("backup pod (%s): %v", podList.Items[0].Name, err)
+//	}
+//	return nil
+//}
 
 func LogfWithTimestamp(t *testing.T, format string, args ...interface{}) {
 	t.Log(time.Now(), fmt.Sprintf(format, args...))

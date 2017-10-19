@@ -15,7 +15,7 @@
 package k8sutil
 
 import (
-	"fmt"
+	//"fmt"
 	"path"
 	"strings"
 
@@ -135,7 +135,7 @@ func NewSelfHostedCassandraPod(m *cassandrautil.Member, seeds []string, clusterN
 		Spec: v1.PodSpec{
 			// Self-hosted etcd pod need to endure node restart.
 			// If we set it to Never, the pod won't restart. If etcd won't come up, nor does other k8s API components.
-			RestartPolicy: v1.RestartPolicyAlways,
+			RestartPolicy: v1.RestartPolicyOnFailure,
 			Containers:    []v1.Container{c},
 			Volumes:       volumes,
 			HostNetwork:   true,
@@ -152,13 +152,6 @@ func NewSelfHostedCassandraPod(m *cassandrautil.Member, seeds []string, clusterN
 	pod = selfHostedPodWithAntiAffinity(pod)
 	addOwnerRefToObject(pod.GetObjectMeta(), owner)
 	return pod
-}
-
-func appendHostsCommands() string {
-	etcdHostsFile := path.Join(cassandraVolumeMountDir, "etcd-hosts.checkpoint")
-	// If hosts checkpoint exists, we will append it to /etc/hosts.
-	// TODO: remove this when host alias works for hostNetwork Pod.
-	return fmt.Sprintf("([ -f %[1]s ] && (cat %[1]s >> /etc/hosts) || true)", etcdHostsFile)
 }
 
 func selfHostedPodWithAntiAffinity(pod *v1.Pod) *v1.Pod {

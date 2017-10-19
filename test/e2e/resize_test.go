@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"os"
 	"testing"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/test/e2e/e2eutil"
 	"github.com/benbromhead/cassandra-operator/test/e2e/framework"
 )
@@ -29,7 +29,7 @@ func TestResizeCluster3to5(t *testing.T) {
 		t.Parallel()
 	}
 	f := framework.Global
-	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-etcd-", 3))
+	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-cassandra-", 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,11 +41,11 @@ func TestResizeCluster3to5(t *testing.T) {
 	}()
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, testEtcd); err != nil {
-		t.Fatalf("failed to create 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to create 3 members cassandra cluster: %v", err)
 	}
 	fmt.Println("reached to 3 members cluster")
 
-	updateFunc := func(cl *api.EtcdCluster) {
+	updateFunc := func(cl *api.CassandraCluster) {
 		cl.Spec.Size = 5
 	}
 	if _, err := e2eutil.UpdateCluster(f.CRClient, testEtcd, 10, updateFunc); err != nil {
@@ -53,7 +53,7 @@ func TestResizeCluster3to5(t *testing.T) {
 	}
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 5, 6, testEtcd); err != nil {
-		t.Fatalf("failed to resize to 5 members etcd cluster: %v", err)
+		t.Fatalf("failed to resize to 5 members cassandra cluster: %v", err)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestResizeCluster5to3(t *testing.T) {
 		t.Parallel()
 	}
 	f := framework.Global
-	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-etcd-", 5))
+	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-cassandra-", 5))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,11 +74,11 @@ func TestResizeCluster5to3(t *testing.T) {
 	}()
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 5, 9, testEtcd); err != nil {
-		t.Fatalf("failed to create 5 members etcd cluster: %v", err)
+		t.Fatalf("failed to create 5 members cassandra cluster: %v", err)
 	}
 	fmt.Println("reached to 5 members cluster")
 
-	updateFunc := func(cl *api.EtcdCluster) {
+	updateFunc := func(cl *api.CassandraCluster) {
 		cl.Spec.Size = 3
 	}
 	if _, err := e2eutil.UpdateCluster(f.CRClient, testEtcd, 10, updateFunc); err != nil {
@@ -86,6 +86,6 @@ func TestResizeCluster5to3(t *testing.T) {
 	}
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, testEtcd); err != nil {
-		t.Fatalf("failed to resize to 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to resize to 3 members cassandra cluster: %v", err)
 	}
 }

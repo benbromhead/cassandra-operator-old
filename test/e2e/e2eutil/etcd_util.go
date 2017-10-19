@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,31 +23,31 @@ import (
 )
 
 const (
-	etcdKeyFoo = "foo"
-	etcdValBar = "bar"
+	cassandraKeyFoo = "foo"
+	cassandraValBar = "bar"
 )
 
 func PutDataToEtcd(url string) error {
-	etcdcli, err := createEtcdClient(url)
+	cassandracli, err := createEtcdClient(url)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultRequestTimeout)
-	_, err = etcdcli.Put(ctx, etcdKeyFoo, etcdValBar)
+	_, err = cassandracli.Put(ctx, cassandraKeyFoo, cassandraValBar)
 	cancel()
-	etcdcli.Close()
+	cassandracli.Close()
 	return err
 }
 
 func CheckEtcdData(t *testing.T, url string) {
-	etcdcli, err := createEtcdClient(url)
+	cassandracli, err := createEtcdClient(url)
 	if err != nil {
-		t.Fatalf("failed to create etcd client:%v", err)
+		t.Fatalf("failed to create cassandra client:%v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultRequestTimeout)
-	resp, err := etcdcli.Get(ctx, etcdKeyFoo)
+	resp, err := cassandracli.Get(ctx, cassandraKeyFoo)
 	cancel()
-	etcdcli.Close()
+	cassandracli.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +55,8 @@ func CheckEtcdData(t *testing.T, url string) {
 		t.Errorf("want only 1 key result, get %d", len(resp.Kvs))
 	} else {
 		val := string(resp.Kvs[0].Value)
-		if val != etcdValBar {
-			t.Errorf("value want = '%s', get = '%s'", etcdValBar, val)
+		if val != cassandraValBar {
+			t.Errorf("value want = '%s', get = '%s'", cassandraValBar, val)
 		}
 	}
 }

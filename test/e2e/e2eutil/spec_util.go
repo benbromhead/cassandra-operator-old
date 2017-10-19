@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,15 +15,15 @@
 package e2eutil
 
 import (
-	"os"
+	//"os"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func NewCluster(genName string, size int) *api.EtcdCluster {
-	return &api.EtcdCluster{
+func NewCluster(genName string, size int) *api.CassandraCluster {
+	return &api.CassandraCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       api.CRDResourceKind,
 			APIVersion: api.SchemeGroupVersion.String(),
@@ -36,53 +36,53 @@ func NewCluster(genName string, size int) *api.EtcdCluster {
 		},
 	}
 }
+//
+//func NewS3BackupPolicy(cleanup bool) *api.BackupPolicy {
+//	return &api.BackupPolicy{
+//		BackupIntervalInSecond: 60 * 60,
+//		MaxBackups:             5,
+//		StorageType:            api.BackupStorageTypeS3,
+//		StorageSource: api.StorageSource{
+//			S3: &api.S3Source{
+//				S3Bucket:  os.Getenv("TEST_S3_BUCKET"),
+//				AWSSecret: os.Getenv("TEST_AWS_SECRET"),
+//			},
+//		},
+//		AutoDelete: cleanup,
+//	}
+//}
+//
+//func NewPVBackupPolicy(cleanup bool, storageClass string) *api.BackupPolicy {
+//	return &api.BackupPolicy{
+//		BackupIntervalInSecond: 60 * 60,
+//		MaxBackups:             5,
+//		StorageType:            api.BackupStorageTypePersistentVolume,
+//		StorageSource: api.StorageSource{
+//			PV: &api.PVSource{
+//				VolumeSizeInMB: 512,
+//				StorageClass:   storageClass,
+//			},
+//		},
+//		AutoDelete: cleanup,
+//	}
+//}
+//
+//func ClusterWithBackup(cl *api.CassandraCluster, backupPolicy *api.BackupPolicy) *api.CassandraCluster {
+//	cl.Spec.Backup = backupPolicy
+//	return cl
+//}
+//
+//func ClusterWithRestore(cl *api.CassandraCluster, restorePolicy *api.RestorePolicy) *api.CassandraCluster {
+//	cl.Spec.Restore = restorePolicy
+//	return cl
+//}
 
-func NewS3BackupPolicy(cleanup bool) *api.BackupPolicy {
-	return &api.BackupPolicy{
-		BackupIntervalInSecond: 60 * 60,
-		MaxBackups:             5,
-		StorageType:            api.BackupStorageTypeS3,
-		StorageSource: api.StorageSource{
-			S3: &api.S3Source{
-				S3Bucket:  os.Getenv("TEST_S3_BUCKET"),
-				AWSSecret: os.Getenv("TEST_AWS_SECRET"),
-			},
-		},
-		AutoDelete: cleanup,
-	}
-}
-
-func NewPVBackupPolicy(cleanup bool, storageClass string) *api.BackupPolicy {
-	return &api.BackupPolicy{
-		BackupIntervalInSecond: 60 * 60,
-		MaxBackups:             5,
-		StorageType:            api.BackupStorageTypePersistentVolume,
-		StorageSource: api.StorageSource{
-			PV: &api.PVSource{
-				VolumeSizeInMB: 512,
-				StorageClass:   storageClass,
-			},
-		},
-		AutoDelete: cleanup,
-	}
-}
-
-func ClusterWithBackup(cl *api.EtcdCluster, backupPolicy *api.BackupPolicy) *api.EtcdCluster {
-	cl.Spec.Backup = backupPolicy
-	return cl
-}
-
-func ClusterWithRestore(cl *api.EtcdCluster, restorePolicy *api.RestorePolicy) *api.EtcdCluster {
-	cl.Spec.Restore = restorePolicy
-	return cl
-}
-
-func ClusterWithVersion(cl *api.EtcdCluster, version string) *api.EtcdCluster {
+func ClusterWithVersion(cl *api.CassandraCluster, version string) *api.CassandraCluster {
 	cl.Spec.Version = version
 	return cl
 }
 
-func ClusterWithSelfHosted(cl *api.EtcdCluster, sh *api.SelfHostedPolicy) *api.EtcdCluster {
+func ClusterWithSelfHosted(cl *api.CassandraCluster, sh *api.SelfHostedPolicy) *api.CassandraCluster {
 	cl.Spec.SelfHosted = sh
 	return cl
 }

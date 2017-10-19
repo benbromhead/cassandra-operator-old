@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,19 +17,19 @@ package e2eutil
 import (
 	"bytes"
 	"fmt"
-	"path"
+	//"path"
 	"strings"
 	"testing"
 	"time"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
-	backups3 "github.com/benbromhead/cassandra-operator/pkg/backup/s3"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
+	//backups3 "github.com/benbromhead/cassandra-operator/pkg/backup/s3"
 	"github.com/benbromhead/cassandra-operator/pkg/generated/clientset/versioned"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
 
 	"k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	//apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -37,7 +37,7 @@ import (
 
 var retryInterval = 10 * time.Second
 
-type acceptFunc func(*api.EtcdCluster) bool
+type acceptFunc func(*api.CassandraCluster) bool
 type filterFunc func(*v1.Pod) bool
 
 func CalculateRestoreWaitTime(needDataClone bool) int {
@@ -49,7 +49,7 @@ func CalculateRestoreWaitTime(needDataClone bool) int {
 	return waitTime
 }
 
-func WaitUntilPodSizeReached(t *testing.T, kubeClient kubernetes.Interface, size, retries int, cl *api.EtcdCluster) ([]string, error) {
+func WaitUntilPodSizeReached(t *testing.T, kubeClient kubernetes.Interface, size, retries int, cl *api.CassandraCluster) ([]string, error) {
 	var names []string
 	err := retryutil.Retry(retryInterval, retries, func() (done bool, err error) {
 		podList, err := kubeClient.Core().Pods(cl.Namespace).List(k8sutil.ClusterListOpt(cl.Name))
@@ -66,7 +66,7 @@ func WaitUntilPodSizeReached(t *testing.T, kubeClient kubernetes.Interface, size
 			names = append(names, pod.Name)
 			nodeNames = append(nodeNames, pod.Spec.NodeName)
 		}
-		LogfWithTimestamp(t, "waiting size (%d), etcd pods: names (%v), nodes (%v)", size, names, nodeNames)
+		LogfWithTimestamp(t, "waiting size (%d), cassandra pods: names (%v), nodes (%v)", size, names, nodeNames)
 		if len(names) != size {
 			return false, nil
 		}
@@ -78,11 +78,11 @@ func WaitUntilPodSizeReached(t *testing.T, kubeClient kubernetes.Interface, size
 	return names, nil
 }
 
-func WaitUntilSizeReached(t *testing.T, crClient versioned.Interface, size, retries int, cl *api.EtcdCluster) ([]string, error) {
+func WaitUntilSizeReached(t *testing.T, crClient versioned.Interface, size, retries int, cl *api.CassandraCluster) ([]string, error) {
 	return waitSizeReachedWithAccept(t, crClient, size, retries, cl)
 }
 
-func WaitSizeAndVersionReached(t *testing.T, kubeClient kubernetes.Interface, version string, size, retries int, cl *api.EtcdCluster) error {
+func WaitSizeAndVersionReached(t *testing.T, kubeClient kubernetes.Interface, version string, size, retries int, cl *api.CassandraCluster) error {
 	return retryutil.Retry(retryInterval, retries, func() (done bool, err error) {
 		var names []string
 		podList, err := kubeClient.Core().Pods(cl.Namespace).List(k8sutil.ClusterListOpt(cl.Name))
@@ -106,7 +106,7 @@ func WaitSizeAndVersionReached(t *testing.T, kubeClient kubernetes.Interface, ve
 			names = append(names, pod.Name)
 			nodeNames = append(nodeNames, pod.Spec.NodeName)
 		}
-		LogfWithTimestamp(t, "waiting size (%d), etcd pods: names (%v), nodes (%v)", size, names, nodeNames)
+		LogfWithTimestamp(t, "waiting size (%d), cassandra pods: names (%v), nodes (%v)", size, names, nodeNames)
 		if len(names) != size {
 			return false, nil
 		}
@@ -118,10 +118,10 @@ func getVersionFromImage(image string) string {
 	return strings.Split(image, ":v")[1]
 }
 
-func waitSizeReachedWithAccept(t *testing.T, crClient versioned.Interface, size, retries int, cl *api.EtcdCluster, accepts ...acceptFunc) ([]string, error) {
+func waitSizeReachedWithAccept(t *testing.T, crClient versioned.Interface, size, retries int, cl *api.CassandraCluster, accepts ...acceptFunc) ([]string, error) {
 	var names []string
 	err := retryutil.Retry(retryInterval, retries, func() (done bool, err error) {
-		currCluster, err := crClient.EtcdV1beta2().EtcdClusters(cl.Namespace).Get(cl.Name, metav1.GetOptions{})
+		currCluster, err := crClient.CassandraV1beta2().CassandraClusters(cl.Namespace).Get(cl.Name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -133,7 +133,7 @@ func waitSizeReachedWithAccept(t *testing.T, crClient versioned.Interface, size,
 		}
 
 		names = currCluster.Status.Members.Ready
-		LogfWithTimestamp(t, "waiting size (%d), healthy etcd members: names (%v)", size, names)
+		LogfWithTimestamp(t, "waiting size (%d), healthy cassandra members: names (%v)", size, names)
 		if len(names) != size {
 			return false, nil
 		}
@@ -145,10 +145,10 @@ func waitSizeReachedWithAccept(t *testing.T, crClient versioned.Interface, size,
 	return names, nil
 }
 
-func WaitUntilMembersWithNamesDeleted(t *testing.T, crClient versioned.Interface, retries int, cl *api.EtcdCluster, targetNames ...string) ([]string, error) {
+func WaitUntilMembersWithNamesDeleted(t *testing.T, crClient versioned.Interface, retries int, cl *api.CassandraCluster, targetNames ...string) ([]string, error) {
 	var remaining []string
 	err := retryutil.Retry(retryInterval, retries, func() (done bool, err error) {
-		currCluster, err := crClient.EtcdV1beta2().EtcdClusters(cl.Namespace).Get(cl.Name, metav1.GetOptions{})
+		currCluster, err := crClient.CassandraV1beta2().CassandraClusters(cl.Namespace).Get(cl.Name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -201,7 +201,7 @@ func WaitBackupPodUp(t *testing.T, kubecli kubernetes.Interface, ns, clusterName
 	})
 }
 
-func waitResourcesDeleted(t *testing.T, kubeClient kubernetes.Interface, cl *api.EtcdCluster) error {
+func waitResourcesDeleted(t *testing.T, kubeClient kubernetes.Interface, cl *api.CassandraCluster) error {
 	undeletedPods, err := WaitPodsDeleted(kubeClient, cl.Namespace, 3, k8sutil.ClusterListOpt(cl.Name))
 	if err != nil {
 		if retryutil.IsRetryFailure(err) && len(undeletedPods) > 0 {
@@ -236,71 +236,71 @@ func waitResourcesDeleted(t *testing.T, kubeClient kubernetes.Interface, cl *api
 	return nil
 }
 
-func WaitBackupDeleted(kubeClient kubernetes.Interface, cl *api.EtcdCluster, checkerOpt StorageCheckerOptions) error {
-	retries := 3
-	if checkerOpt.DeletedFromAPI {
-		// Currently waiting deployment to be gone from API takes a lot of time.
-		// TODO: revisit this when we use "background propagate" deletion policy.
-		retries = 30
-	}
-	err := retryutil.Retry(retryInterval, retries, func() (bool, error) {
-		d, err := kubeClient.AppsV1beta1().Deployments(cl.Namespace).Get(k8sutil.BackupSidecarName(cl.Name), metav1.GetOptions{})
-		// If we don't need to wait deployment to be completely gone, we can say it is deleted
-		// as long as DeletionTimestamp is not nil. Otherwise, we need to wait it is gone by checking not found error.
-		if (!checkerOpt.DeletedFromAPI && d.DeletionTimestamp != nil) || apierrors.IsNotFound(err) {
-			return true, nil
-		}
-		if err == nil {
-			return false, nil
-		}
-		return false, err
-	})
-	if err != nil {
-		return fmt.Errorf("failed to wait backup Deployment deleted: %v", err)
-	}
-
-	_, err = WaitPodsDeleted(kubeClient, cl.Namespace, 2,
-		metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				"app":          k8sutil.BackupPodSelectorAppField,
-				"etcd_cluster": cl.Name,
-			}).String(),
-		})
-	if err != nil {
-		return fmt.Errorf("failed to wait backup pod terminated: %v", err)
-	}
-	// The rest is to track backup storage, e.g. PV or S3 "dir" deleted.
-	// If AutoDelete=false, we don't delete them and thus don't check them.
-	if !cl.Spec.Backup.AutoDelete {
-		return nil
-	}
-	err = retryutil.Retry(retryInterval, 3, func() (done bool, err error) {
-		switch cl.Spec.Backup.StorageType {
-		case api.BackupStorageTypePersistentVolume, api.BackupStorageTypeDefault:
-			pl, err := kubeClient.CoreV1().PersistentVolumeClaims(cl.Namespace).List(k8sutil.ClusterListOpt(cl.Name))
-			if err != nil {
-				return false, err
-			}
-			if len(pl.Items) > 0 {
-				return false, nil
-			}
-		case api.BackupStorageTypeS3:
-			s3cli := backups3.NewFromClient(checkerOpt.S3Bucket, path.Join(cl.Namespace, cl.Name), checkerOpt.S3Cli)
-			keys, err := s3cli.List()
-			if err != nil {
-				return false, err
-			}
-			if len(keys) > 0 {
-				return false, nil
-			}
-		}
-		return true, nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to wait storage (%s) to be deleted: %v", cl.Spec.Backup.StorageType, err)
-	}
-	return nil
-}
+//func WaitBackupDeleted(kubeClient kubernetes.Interface, cl *api.CassandraCluster, checkerOpt StorageCheckerOptions) error {
+//	retries := 3
+//	if checkerOpt.DeletedFromAPI {
+//		// Currently waiting deployment to be gone from API takes a lot of time.
+//		// TODO: revisit this when we use "background propagate" deletion policy.
+//		retries = 30
+//	}
+//	err := retryutil.Retry(retryInterval, retries, func() (bool, error) {
+//		d, err := kubeClient.AppsV1beta1().Deployments(cl.Namespace).Get(k8sutil.BackupSidecarName(cl.Name), metav1.GetOptions{})
+//		// If we don't need to wait deployment to be completely gone, we can say it is deleted
+//		// as long as DeletionTimestamp is not nil. Otherwise, we need to wait it is gone by checking not found error.
+//		if (!checkerOpt.DeletedFromAPI && d.DeletionTimestamp != nil) || apierrors.IsNotFound(err) {
+//			return true, nil
+//		}
+//		if err == nil {
+//			return false, nil
+//		}
+//		return false, err
+//	})
+//	if err != nil {
+//		return fmt.Errorf("failed to wait backup Deployment deleted: %v", err)
+//	}
+//
+//	_, err = WaitPodsDeleted(kubeClient, cl.Namespace, 2,
+//		metav1.ListOptions{
+//			LabelSelector: labels.SelectorFromSet(map[string]string{
+//				"app":          k8sutil.BackupPodSelectorAppField,
+//				"cassandra_cluster": cl.Name,
+//			}).String(),
+//		})
+//	if err != nil {
+//		return fmt.Errorf("failed to wait backup pod terminated: %v", err)
+//	}
+//	// The rest is to track backup storage, e.g. PV or S3 "dir" deleted.
+//	// If AutoDelete=false, we don't delete them and thus don't check them.
+//	if !cl.Spec.Backup.AutoDelete {
+//		return nil
+//	}
+//	err = retryutil.Retry(retryInterval, 3, func() (done bool, err error) {
+//		switch cl.Spec.Backup.StorageType {
+//		case api.BackupStorageTypePersistentVolume, api.BackupStorageTypeDefault:
+//			pl, err := kubeClient.CoreV1().PersistentVolumeClaims(cl.Namespace).List(k8sutil.ClusterListOpt(cl.Name))
+//			if err != nil {
+//				return false, err
+//			}
+//			if len(pl.Items) > 0 {
+//				return false, nil
+//			}
+//		case api.BackupStorageTypeS3:
+//			s3cli := backups3.NewFromClient(checkerOpt.S3Bucket, path.Join(cl.Namespace, cl.Name), checkerOpt.S3Cli)
+//			keys, err := s3cli.List()
+//			if err != nil {
+//				return false, err
+//			}
+//			if len(keys) > 0 {
+//				return false, nil
+//			}
+//		}
+//		return true, nil
+//	})
+//	if err != nil {
+//		return fmt.Errorf("failed to wait storage (%s) to be deleted: %v", cl.Spec.Backup.StorageType, err)
+//	}
+//	return nil
+//}
 
 func WaitPodsWithImageDeleted(kubecli kubernetes.Interface, namespace, image string, retries int, lo metav1.ListOptions) ([]*v1.Pod, error) {
 	return waitPodsDeleted(kubecli, namespace, retries, lo, func(p *v1.Pod) bool {
@@ -347,7 +347,7 @@ func waitPodsDeleted(kubecli kubernetes.Interface, namespace string, retries int
 	return pods, err
 }
 
-// WaitUntilOperatorReady will wait until the first pod selected for the label name=etcd-operator is ready.
+// WaitUntilOperatorReady will wait until the first pod selected for the label name=cassandra-operator is ready.
 func WaitUntilOperatorReady(kubecli kubernetes.Interface, namespace, name string) error {
 	var podName string
 	lo := metav1.ListOptions{

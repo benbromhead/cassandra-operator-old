@@ -190,7 +190,7 @@ func newEtcdServiceManifest(svcName, clusterName, clusterIP string, ports []v1.S
 			Name:   svcName,
 			Labels: labels,
 			Annotations: map[string]string{
-				TolerateUnreadyEndpointsAnnotation: "true",
+				TolerateUnreadyEndpointsAnnotation: "false",
 			},
 		},
 		Spec: v1.ServiceSpec{
@@ -296,7 +296,7 @@ func NewCassandraPod(m *cassandrautil.Member, seeds []string, clusterName string
 		},
 		Spec: v1.PodSpec{
 			Containers:    []v1.Container{container},
-			RestartPolicy: v1.RestartPolicyNever,
+			RestartPolicy: v1.RestartPolicyOnFailure,
 			Volumes:       volumes,
 			// DNS A record: `[m.Name].[clusterName].Namespace.svc`
 			// For example, etcd-0000 in default namesapce will have DNS name

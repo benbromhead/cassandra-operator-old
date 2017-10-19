@@ -1,4 +1,4 @@
-// Copyright 2016 The etcd-operator Authors
+// Copyright 2016 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ type Framework struct {
 // Setup setups a test framework and points "Global" to it.
 func Setup() error {
 	kubeconfig := flag.String("kubeconfig", "", "kube config path, e.g. $HOME/.kube/config")
-	opImage := flag.String("operator-image", "", "operator image, e.g. gcr.io/coreos-k8s-scale-testing/etcd-operator")
+	opImage := flag.String("operator-image", "", "operator image, e.g. gcr.io/coreos-k8s-scale-testing/cassandra-operator")
 	ns := flag.String("namespace", "default", "e2e test namespace")
 	flag.Parse()
 
@@ -89,9 +89,9 @@ func Teardown() error {
 
 func (f *Framework) setup() error {
 	if err := f.SetupEtcdOperator(); err != nil {
-		return fmt.Errorf("failed to setup etcd operator: %v", err)
+		return fmt.Errorf("failed to setup cassandra operator: %v", err)
 	}
-	logrus.Info("etcd operator created successfully")
+	logrus.Info("cassandra operator created successfully")
 	if os.Getenv("AWS_TEST_ENABLED") == "true" {
 		if err := f.setupAWS(); err != nil {
 			return fmt.Errorf("fail to setup aws: %v", err)
@@ -103,16 +103,16 @@ func (f *Framework) setup() error {
 
 func (f *Framework) SetupEtcdOperator() error {
 	// TODO: unify this and the yaml file in example/
-	cmd := []string{"/usr/local/bin/etcd-operator"}
+	cmd := []string{"/usr/local/bin/cassandra-operator"}
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "etcd-operator",
-			Labels: map[string]string{"name": "etcd-operator"},
+			Name:   "cassandra-operator",
+			Labels: map[string]string{"name": "cassandra-operator"},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Name:            "etcd-operator",
+					Name:            "cassandra-operator",
 					Image:           f.opImage,
 					ImagePullPolicy: v1.PullAlways,
 					Command:         cmd,
@@ -146,16 +146,16 @@ func (f *Framework) SetupEtcdOperator() error {
 	p, err := k8sutil.CreateAndWaitPod(f.KubeClient, f.Namespace, pod, 60*time.Second)
 	if err != nil {
 		// assuming `kubectl` installed on $PATH
-		cmd := exec.Command("kubectl", "-n", f.Namespace, "describe", "pod", "etcd-operator")
+		cmd := exec.Command("kubectl", "-n", f.Namespace, "describe", "pod", "cassandra-operator")
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		cmd.Run() // Just ignore the error...
-		logrus.Info("describing etcd-operator pod:", out.String())
+		logrus.Info("describing cassandra-operator pod:", out.String())
 		return err
 	}
-	logrus.Infof("etcd operator pod is running on node (%s)", p.Spec.NodeName)
+	logrus.Infof("cassandra operator pod is running on node (%s)", p.Spec.NodeName)
 
-	return e2eutil.WaitUntilOperatorReady(f.KubeClient, f.Namespace, "etcd-operator")
+	return e2eutil.WaitUntilOperatorReady(f.KubeClient, f.Namespace, "cassandra-operator")
 }
 
 func (f *Framework) DeleteEtcdOperatorCompletely() error {
@@ -166,7 +166,7 @@ func (f *Framework) DeleteEtcdOperatorCompletely() error {
 	// On k8s 1.6.1, grace period isn't accurate. It took ~10s for operator pod to completely disappear.
 	// We work around by increasing the wait time. Revisit this later.
 	err = retryutil.Retry(5*time.Second, 6, func() (bool, error) {
-		_, err := f.KubeClient.CoreV1().Pods(f.Namespace).Get("etcd-operator", metav1.GetOptions{})
+		_, err := f.KubeClient.CoreV1().Pods(f.Namespace).Get("cassandra-operator", metav1.GetOptions{})
 		if err == nil {
 			return false, nil
 		}
@@ -176,13 +176,13 @@ func (f *Framework) DeleteEtcdOperatorCompletely() error {
 		return false, err
 	})
 	if err != nil {
-		return fmt.Errorf("fail to wait etcd operator pod gone from API: %v", err)
+		return fmt.Errorf("fail to wait cassandra operator pod gone from API: %v", err)
 	}
 	return nil
 }
 
 func (f *Framework) deleteEtcdOperator() error {
-	return f.KubeClient.CoreV1().Pods(f.Namespace).Delete("etcd-operator", metav1.NewDeleteOptions(1))
+	return f.KubeClient.CoreV1().Pods(f.Namespace).Delete("cassandra-operator", metav1.NewDeleteOptions(1))
 }
 
 func (f *Framework) setupAWS() error {

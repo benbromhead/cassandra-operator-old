@@ -38,7 +38,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"os"
-	"github.com/golang/glog"
+	//"github.com/golang/glog"
 )
 
 var (
@@ -134,18 +134,18 @@ func New(config Config, cl *api.CassandraCluster) *Cluster {
 	return c
 }
 
-func (c *Cluster) ResolvePodServiceAddress(name string) string {
+func (c *Cluster) ResolvePodServiceAddress(member *cassandrautil.Member) (string, error) {
 	contactPoint := ""
 	if len(os.Getenv("KUBECONFIG")) > 0 {
-		pod, err := c.config.KubeCli.CoreV1().Pods(c.cluster.Namespace).Get(name, metav1.GetOptions{})
+		pod, err := c.config.KubeCli.CoreV1().Pods(c.cluster.Namespace).Get(member.Name, metav1.GetOptions{})
 		if err != nil {
-			glog.Fatalf("Could not look up pod ip")
+			return "", err
 		}
 		contactPoint = pod.Status.PodIP
 	} else {
-		contactPoint = name
+		contactPoint = member.Addr()
 	}
-	return contactPoint
+	return contactPoint, nil
 }
 
 func (c *Cluster) setup() error {
@@ -318,7 +318,7 @@ func (c *Cluster) run() {
 				continue
 			}
 			if len(running) == 0 {
-				c.logger.Warningf("all etcd pods are dead. Trying to recover from a previous backup")
+				c.logger.Warningf("all cassandra pods are dead. Trying to recover from a previous backup")
 				rerr = c.disasterRecovery(nil)
 				if rerr != nil {
 					c.logger.Errorf("fail to do disaster recovery: %v", rerr)
@@ -433,6 +433,10 @@ func (c *Cluster) startSeedMember(recoverFromBackup bool) error {
 	if err := c.createPod(ms, m, "new", recoverFromBackup); err != nil {
 		return fmt.Errorf("failed to create seed member (%s): %v", m.Name, err)
 	}
+
+	if ip, err := c.ResolvePodServiceAddress(m); err != nil {
+		m.IP = ip
+	}
 	c.memberCounter++
 	c.members = ms
 	c.logger.Infof("cluster created with seed member (%s)", m.Name)
@@ -492,8 +496,7 @@ func (c *Cluster) setupServices() error {
 }
 
 func (c *Cluster) createPod(members cassandrautil.MemberSet, m *cassandrautil.Member, state string, needRecovery bool) error {
-
-	pod := k8sutil.NewCassandraPod(m, members.Seeds(), c.cluster.Name, state, c.cluster.Spec, c.cluster.AsOwner())
+	pod := k8sutil.NewCassandraPod(m, members.ExcludedSeeds(m.Name), c.cluster.Name, state, c.cluster.Spec, c.cluster.AsOwner())
 	//if needRecovery {
 	//	k8sutil.AddRecoveryToPod(pod, c.cluster.Name, token, m, c.cluster.Spec)
 	//}
@@ -551,7 +554,8 @@ func (c *Cluster) updateMemberStatus(members cassandrautil.MemberSet) {
 	var ready, unready []string
 	for _, m := range members {
 		url := m.Addr()
-		healthy, err := cassandrautil.CheckHealth(c.ResolvePodServiceAddress(m.Name), c.tlsConfig)
+		ip, _ := c.ResolvePodServiceAddress(m) //TODO: make IP Detection a bit better
+		healthy, err := cassandrautil.CheckHealth(ip, c.tlsConfig)
 		if err != nil {
 			c.logger.Warningf("health check of cassandra member (%s) failed: %v", url, err)
 		}

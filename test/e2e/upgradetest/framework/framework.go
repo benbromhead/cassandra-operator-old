@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ func New(fc Config) (*Framework, error) {
 }
 
 func (f *Framework) CreateOperator(name string) error {
-	cmd := []string{"/usr/local/bin/etcd-operator"}
+	cmd := []string{"/usr/local/bin/cassandra-operator"}
 	image := f.OldImage
 	d := &appsv1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,8 +138,8 @@ func (f *Framework) DeleteOperator(name string) error {
 		return err
 	}
 
-	// Wait until the etcd-operator pod is actually gone and not just terminating.
-	// In upgrade tests, the next test shouldn't see any etcd operator pod.
+	// Wait until the cassandra-operator pod is actually gone and not just terminating.
+	// In upgrade tests, the next test shouldn't see any cassandra operator pod.
 	lo := metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(operatorLabelSelector(name)).String(),
 	}
@@ -150,7 +150,7 @@ func (f *Framework) DeleteOperator(name string) error {
 	// The deleted operator will not actively release the Endpoints lock causing a non-leader candidate to timeout for the lease duration: 15s
 	// Deleting the Endpoints resource simulates the leader actively releasing the lock so that the next candidate avoids the timeout.
 	// TODO: change this if we change to use another kind of lock, e.g. configmap.
-	return f.KubeCli.CoreV1().Endpoints(f.KubeNS).Delete("etcd-operator", metav1.NewDeleteOptions(0))
+	return f.KubeCli.CoreV1().Endpoints(f.KubeNS).Delete("cassandra-operator", metav1.NewDeleteOptions(0))
 }
 
 func (f *Framework) UpgradeOperator(name string) error {
@@ -187,7 +187,7 @@ func (f *Framework) setupAWS() error {
 		return err
 	}
 	f.S3Cli = s3.New(sess)
-	f.S3Bucket = "jenkins-etcd-operator"
+	f.S3Bucket = "jenkins-cassandra-operator"
 	return nil
 }
 

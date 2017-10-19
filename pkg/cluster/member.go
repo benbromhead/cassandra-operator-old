@@ -15,13 +15,7 @@
 package cluster
 
 import (
-	//"fmt"
-	//"strings"
-
-	//api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
-	//"github.com/coreos/etcd/etcdserver/etcdserverpb"
-	//"github.com/pkg/errors"
 
 	"k8s.io/api/core/v1"
 	"github.com/golang/glog"
@@ -29,7 +23,8 @@ import (
 
 func (c *Cluster) updateMembers(known cassandrautil.MemberSet) error {
 
-	resp, err := cassandrautil.GetMemberNodes(c.ResolvePodServiceAddress(known.PickOne().Name))
+	ip, _ := c.ResolvePodServiceAddress(known.PickOne())
+	resp, err := cassandrautil.GetMemberNodes(ip)
 	if err != nil {
 		return err
 	}
@@ -37,7 +32,8 @@ func (c *Cluster) updateMembers(known cassandrautil.MemberSet) error {
 	podLookup := make(map[string]*cassandrautil.Member)
 
 	for _, p := range known {
-		podLookup[c.ResolvePodServiceAddress(p.Name)] = p
+		ip , _ := c.ResolvePodServiceAddress(p)
+		podLookup[ip] = p
 	}
 
 
@@ -47,6 +43,7 @@ func (c *Cluster) updateMembers(known cassandrautil.MemberSet) error {
 			members[podLookup[host].Name] = &cassandrautil.Member{
 				Name:         podLookup[host].Name,
 				Namespace:    c.cluster.Namespace,
+				IP: host,
 				SecurePeer:   c.isSecurePeer(),
 				SecureClient: c.isSecureClient(),
 			}
@@ -60,7 +57,7 @@ func (c *Cluster) updateMembers(known cassandrautil.MemberSet) error {
 	return nil
 }
 func (c *Cluster) getJoiningNodes(known cassandrautil.MemberSet) (int, error) {
-	joining, err := cassandrautil.GetJoiningNodes(known.ClientContactPoints()[0]) //TODO: make array safe
+	joining, err := cassandrautil.GetJoiningNodes(known.PickOne().Addr())
 	return len(joining), err
 }
 
@@ -77,7 +74,7 @@ func (c *Cluster) newMember(id int) *cassandrautil.Member {
 func (c *Cluster) podsToMemberSet(pods []*v1.Pod, sc bool) cassandrautil.MemberSet {
 	members := cassandrautil.MemberSet{}
 	for _, pod := range pods {
-		m := &cassandrautil.Member{Name: pod.Name , Namespace: pod.Namespace, SecureClient: sc}
+		m := &cassandrautil.Member{Name: pod.Name, Namespace: pod.Namespace, SecureClient: sc, IP: pod.Status.PodIP}
 		members.Add(m)
 	}
 	return members

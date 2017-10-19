@@ -1,4 +1,4 @@
-// Copyright 2016 The etcd-operator Authors
+// Copyright 2016 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
 	"github.com/benbromhead/cassandra-operator/test/e2e/e2eslow"
 	"github.com/benbromhead/cassandra-operator/test/e2e/e2eutil"
@@ -42,7 +42,7 @@ func TestSelfHosted(t *testing.T) {
 
 func testCreateSelfHostedCluster(t *testing.T) {
 	f := framework.Global
-	c := e2eutil.NewCluster("test-etcd-", 3)
+	c := e2eutil.NewCluster("test-cassandra-", 3)
 	c = e2eutil.ClusterWithSelfHosted(c, &api.SelfHostedPolicy{})
 	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, c)
 	if err != nil {
@@ -56,7 +56,7 @@ func testCreateSelfHostedCluster(t *testing.T) {
 	}()
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 24, testEtcd); err != nil {
-		t.Fatalf("failed to create 3 members self-hosted etcd cluster: %v", err)
+		t.Fatalf("failed to create 3 members self-hosted cassandra cluster: %v", err)
 	}
 }
 
@@ -71,9 +71,9 @@ func testCreateSelfHostedClusterWithBootMember(t *testing.T) {
 
 	bootURL := fmt.Sprintf("http://%s:2379", bootEtcdPod.Status.PodIP)
 
-	t.Logf("boot etcd URL: %s", bootURL)
+	t.Logf("boot cassandra URL: %s", bootURL)
 
-	c := e2eutil.NewCluster("test-etcd-", 3)
+	c := e2eutil.NewCluster("test-cassandra-", 3)
 	c = e2eutil.ClusterWithSelfHosted(c, &api.SelfHostedPolicy{
 		BootMemberClientEndpoint: bootURL,
 	})
@@ -89,12 +89,12 @@ func testCreateSelfHostedClusterWithBootMember(t *testing.T) {
 	}()
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 12, testEtcd); err != nil {
-		t.Fatalf("failed to create 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to create 3 members cassandra cluster: %v", err)
 	}
 }
 
-var etcdCmd = `
-  etcd --name=$(POD_NAME) --data-dir=/var/etcd/data \
+var cassandraCmd = `
+  cassandra --name=$(POD_NAME) --data-dir=/var/cassandra/data \
   --listen-client-urls=http://0.0.0.0:2379 --listen-peer-urls=http://0.0.0.0:2380 \
   --advertise-client-urls=http://$(POD_IP):2379 --initial-advertise-peer-urls=http://$(POD_IP):2380 \
   --initial-cluster=$(POD_NAME)=http://$(POD_IP):2380 --initial-cluster-token=$(POD_NAME)  --initial-cluster-state=new
@@ -103,14 +103,14 @@ var etcdCmd = `
 func startEtcd(f *framework.Framework) (*v1.Pod, error) {
 	p := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "boot-etcd",
+			Name: "boot-cassandra",
 		},
 		Spec: v1.PodSpec{
 			RestartPolicy: v1.RestartPolicyNever,
 			Containers: []v1.Container{{
-				Command: []string{"/bin/sh", "-ec", etcdCmd},
-				Name:    "etcd",
-				Image:   "quay.io/coreos/etcd:v3.1.8",
+				Command: []string{"/bin/sh", "-ec", cassandraCmd},
+				Name:    "cassandra",
+				Image:   "quay.io/coreos/cassandra:v3.1.8",
 				Env: []v1.EnvVar{{
 					Name:      "POD_NAME",
 					ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
@@ -152,7 +152,7 @@ func testSelfHostedClusterWithBackup(t *testing.T) {
 
 	_, err = e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, testEtcd)
 	if err != nil {
-		t.Fatalf("failed to create 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to create 3 members cassandra cluster: %v", err)
 	}
 	fmt.Println("reached to 3 members cluster")
 	err = e2eutil.WaitBackupPodUp(t, f.KubeClient, f.Namespace, testEtcd.Name, 6)
@@ -189,18 +189,18 @@ func cleanupSelfHostedHostpath() {
 						Name:  name,
 						Image: "busybox",
 						VolumeMounts: []v1.VolumeMount{
-							// TODO: This is an assumption on etcd container volume mount.
-							{Name: "etcd-data", MountPath: "/var/etcd"},
+							// TODO: This is an assumption on cassandra container volume mount.
+							{Name: "cassandra-data", MountPath: "/var/cassandra"},
 						},
 						Command: []string{
-							// TODO: this is an assumption on the format of etcd data dir.
-							"/bin/sh", "-ec", fmt.Sprintf("rm -rf /var/etcd/%s-*", f.Namespace),
+							// TODO: this is an assumption on the format of cassandra data dir.
+							"/bin/sh", "-ec", fmt.Sprintf("rm -rf /var/cassandra/%s-*", f.Namespace),
 						},
 					}},
 					Volumes: []v1.Volume{{
-						Name: "etcd-data",
-						// TODO: This is an assumption on self hosted etcd volumes.
-						VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/etcd"}},
+						Name: "cassandra-data",
+						// TODO: This is an assumption on self hosted cassandra volumes.
+						VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/cassandra"}},
 					}},
 				},
 			}

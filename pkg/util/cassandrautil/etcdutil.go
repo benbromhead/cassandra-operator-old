@@ -18,48 +18,94 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	//"github.com/benbromhead/cassandra-operator/pkg/util/constants"
-	//"github.com/coreos/etcd/clientv3"
-
-	//"golang.org/x/net/context"
 	"github.com/gocql/gocql"
-	//"github.com/aws/aws-sdk-go/private/protocol/query"
-	"github.com/swarvanusg/go_jolokia"
 	"github.com/golang/glog"
-	//"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/swarvanusg/go_jolokia"
 )
 
 //TODO: Change this to query Cassandra peer tables
 
 type CassandraMember struct {
-	Peer string
-	DataCenter string
-	HostId string
-	Rack string
+	Peer           string
+	DataCenter     string
+	HostId         string
+	Rack           string
 	ReleaseVersion string
-	RPCAddress string
+	RPCAddress     string
 }
 
-func GetMemberNodes(url string) ([]string, error){
+func GetIDbyHost(url string, ip string) (string, error) {
 	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
 	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "HostIdMap")
 	if err != nil {
-		glog.Warning("Could not get joining nodes")
+		glog.Warning("Could not get node membership")
+	}
+	if membernodes, ok := resp.(map[string]interface{}); ok {
+		if data, ok := membernodes[ip]; ok {
+			if d, ok := data.(string); ok {
+				return d, nil
+			} else {
+				return "", nil
+			}
+		} else {
+			return "", fmt.Errorf("could not find ID by ip")
+		}
+	} else {
+		return "", fmt.Errorf("could not connect to %s: %v", url, err)
 	}
 
+}
+
+func GetMemberNodes(url string) ([]string, error) {
+	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
+	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "HostIdMap")
+	if err != nil {
+		glog.Warning("Could not get node membership")
+	}
 
 	if membernodes, ok := resp.(map[string]interface{}); ok {
-		hosts := make([]string, len(membernodes))
+		hosts := make([]string, 0)
 		for key, _ := range membernodes {
 			hosts = append(hosts, key)
 		}
 		return hosts, nil
 	} else {
-		return nil, fmt.Errorf("could not get joining nodes list from %s: %v", url, err)
+		return nil, fmt.Errorf("could not get live nodes list from %s: %v", url, err)
 	}
 }
 
-func GetJoiningNodes(url string) ([]string, error){
+func GetDownNodesCount(url string) (int, error) {
+	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
+
+	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "UnreachableNodes")
+	if err != nil {
+		glog.Warning("Could not get UnreachableNodes ")
+	}
+
+	if joiningnodes, ok := resp.([]interface{}); ok {
+		return len(joiningnodes), nil
+	} else {
+		return 0, fmt.Errorf("could not get leaving nodes list from %s: %v", url, err)
+	}
+}
+
+
+func GetLeavingNodes(url string) ([]string, error) {
+	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
+
+	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "LeavingNodes")
+	if err != nil {
+		glog.Warning("Could not get leaving nodes")
+	}
+
+	if joiningnodes, ok := resp.([]string); ok {
+		return joiningnodes, nil
+	} else {
+		return nil, fmt.Errorf("could not get leaving nodes list from %s: %v", url, err)
+	}
+}
+
+func GetJoiningNodes(url string) ([]string, error) {
 	client := go_jolokia.NewJolokiaClient("http://" + url + ":8778/jolokia/")
 
 	resp, err := client.GetAttr("org.apache.cassandra.db", []string{"type=StorageService"}, "JoiningNodes")
@@ -91,34 +137,32 @@ func ListMembers(clientURLs string, tc *tls.Config) ([]*CassandraMember, error) 
 	var releaseVersion string
 	var rpcAddress string
 
-
 	query := session.Query("SELECT peer, data_center, host_id, preferred_ip, rack, release_version, rpc_address FROM system.peers")
 	qIter := query.Iter()
 	var members = []*CassandraMember{}
 
 	for qIter.Scan(&peer, &dataCenter, &hostId, &preferredIp, &rack, &releaseVersion, &rpcAddress) {
 		members = append(members, &CassandraMember{
-			Peer: peer,
-			DataCenter:dataCenter,
-			HostId: hostId.String(),
-			Rack:rack,
-			ReleaseVersion:releaseVersion,
-			RPCAddress:rpcAddress,
+			Peer:           peer,
+			DataCenter:     dataCenter,
+			HostId:         hostId.String(),
+			Rack:           rack,
+			ReleaseVersion: releaseVersion,
+			RPCAddress:     rpcAddress,
 		})
 	}
 
 	localquery := session.Query("SELECT broadcast_address, data_center, host_id, rack, release_version, rpc_address FROM system.local")
 	lIter := localquery.Iter()
 
-
 	for lIter.Scan(&peer, &dataCenter, &hostId, &preferredIp, &rack, &releaseVersion, &rpcAddress) {
 		members = append(members, &CassandraMember{
-			Peer: peer,
-			DataCenter:dataCenter,
-			HostId: hostId.String(),
-			Rack:rack,
-			ReleaseVersion:releaseVersion,
-			RPCAddress:rpcAddress,
+			Peer:           peer,
+			DataCenter:     dataCenter,
+			HostId:         hostId.String(),
+			Rack:           rack,
+			ReleaseVersion: releaseVersion,
+			RPCAddress:     rpcAddress,
 		})
 	}
 
@@ -126,10 +170,24 @@ func ListMembers(clientURLs string, tc *tls.Config) ([]*CassandraMember, error) 
 	return members, err
 }
 
-func RemoveMember(id string) error {
+func DecommissionMember(id string) error {
 	client := go_jolokia.NewJolokiaClient("http://" + id + ":8778/jolokia/")
 
-	_, err := client.ExecuteOperation("org.apache.cassandra.db:type=StorageService", "decommission()", []interface{}{}, "")
+	_, err := client.ExecuteOperation("org.apache.cassandra.db:type=StorageService", "decommission", []interface{}{}, "")
+	if err != nil {
+		glog.Warning("Could not decommission node")
+	}
+	return err
+}
+
+
+func RemoveNode(id string, target string) error {
+	hostId , _ := GetIDbyHost(id, target)
+	client := go_jolokia.NewJolokiaClient("http://" + id + ":8778/jolokia/")
+
+	resp, err := client.ExecuteOperation("org.apache.cassandra.db:type=StorageService", "removeNode", []interface{}{hostId}, "")
+
+	glog.Info(resp)
 	if err != nil {
 		glog.Warning("Could not decommission node")
 	}

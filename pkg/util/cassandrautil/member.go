@@ -30,8 +30,10 @@ type Member struct {
 	// ID field can be 0, which is unknown ID.
 	// We know the ID of a member when we get the member information from etcd,
 	// but not from Kubernetes pod list.
-	ID string
+	ID           string
 	ContactPoint string
+
+	IP string
 
 	Seed bool
 
@@ -72,6 +74,16 @@ func (m *Member) ListenPeerURL() string {
 func (m *Member) PeerURL() string {
 	return fmt.Sprintf("%s://%s:2380", m.peerScheme(), m.Addr())
 }
+
+func (ms MemberSet) FindMemberByIp(ip string) (*Member, error) {
+	for _, m := range ms {
+		if m.IP == ip {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("IP not in member set")
+}
+
 
 type MemberSet map[string]*Member
 
@@ -128,11 +140,21 @@ func (ms MemberSet) PickOne() *Member {
 	panic("empty")
 }
 
-
 func (ms MemberSet) Seeds() []string {
 	ps := make([]string, 0)
 	for _, m := range ms {
-			ps = append(ps, m.Addr())
+		ps = append(ps, m.Addr())
+	}
+	return ps
+}
+
+func (ms MemberSet) ExcludedSeeds(exclude string) []string {
+	ps := make([]string, 0)
+	for _, m := range ms {
+		if m.Name == exclude {
+			continue
+		}
+		ps = append(ps, m.Addr())
 	}
 	return ps
 }

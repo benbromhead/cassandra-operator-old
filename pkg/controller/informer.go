@@ -72,11 +72,11 @@ func (c *Controller) initResource() error {
 }
 
 func (c *Controller) onAddCassandraClus(obj interface{}) {
-	c.syncEtcdClus(obj.(*api.CassandraCluster))
+	c.syncCassandraClus(obj.(*api.CassandraCluster))
 }
 
 func (c *Controller) onUpdateCassandraClus(oldObj, newObj interface{}) {
-	c.syncEtcdClus(newObj.(*api.CassandraCluster))
+	c.syncCassandraClus(newObj.(*api.CassandraCluster))
 }
 
 func (c *Controller) onDeleteCassandraClus(obj interface{}) {
@@ -104,7 +104,7 @@ func (c *Controller) onDeleteCassandraClus(obj interface{}) {
 	pt.stop()
 }
 
-func (c *Controller) syncEtcdClus(clus *api.CassandraCluster) {
+func (c *Controller) syncCassandraClus(clus *api.CassandraCluster) {
 	ev := &Event{
 		Type:   kwatch.Added,
 		Object: clus,

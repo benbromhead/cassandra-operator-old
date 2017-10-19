@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 // restart operator should resume cluster
 func TestRestartOperator(t *testing.T) {
 	f := framework.Global
-	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-etcd-", 3))
+	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-cassandra-", 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,11 +36,11 @@ func TestRestartOperator(t *testing.T) {
 
 	names, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, testEtcd)
 	if err != nil {
-		t.Fatalf("failed to create 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to create 3 members cassandra cluster: %v", err)
 	}
 
 	if err := f.DeleteEtcdOperatorCompletely(); err != nil {
-		t.Fatalf("fail to delete etcd operator pod: %v", err)
+		t.Fatalf("fail to delete cassandra operator pod: %v", err)
 	}
 
 	if err := e2eutil.KillMembers(f.KubeClient, f.Namespace, names[0]); err != nil {
@@ -54,10 +54,10 @@ func TestRestartOperator(t *testing.T) {
 	}
 
 	if err := f.SetupEtcdOperator(); err != nil {
-		t.Fatalf("fail to restart etcd operator: %v", err)
+		t.Fatalf("fail to restart cassandra operator: %v", err)
 	}
 
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, testEtcd); err != nil {
-		t.Fatalf("failed to resize to 3 members etcd cluster: %v", err)
+		t.Fatalf("failed to resize to 3 members cassandra cluster: %v", err)
 	}
 }

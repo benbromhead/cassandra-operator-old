@@ -1,4 +1,4 @@
-// Copyright 2017 The etcd-operator Authors
+// Copyright 2017 The cassandra-operator Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"math/rand"
 	"testing"
 
-	api "github.com/benbromhead/cassandra-operator/pkg/apis/etcd/v1beta2"
+	api "github.com/benbromhead/cassandra-operator/pkg/apis/cassandra/v1beta2"
 	"github.com/benbromhead/cassandra-operator/pkg/util/k8sutil"
 	"github.com/benbromhead/cassandra-operator/test/e2e/e2eutil"
 
@@ -29,7 +29,7 @@ import (
 
 func newOperatorName() string {
 	suffix := fmt.Sprintf("-%d", rand.Uint64())
-	return "etcd-operator" + suffix
+	return "cassandra-operator" + suffix
 }
 
 func TestResize(t *testing.T) {
@@ -181,14 +181,14 @@ func testRestoreWithBackupPolicy(t *testing.T, bp *api.BackupPolicy) {
 		t.Fatalf("failed to create backup pod: %v", err)
 	}
 
-	// write data to etcd and make a backup
+	// write data to cassandra and make a backup
 	pod, err := testF.KubeCli.CoreV1().Pods(testF.KubeNS).Get(names[0], metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get backup pod:%v", err)
 	}
 	err = e2eutil.PutDataToEtcd(fmt.Sprintf("http://%s:2379", pod.Status.PodIP))
 	if err != nil {
-		t.Fatalf("failed to put data to etcd:%v", err)
+		t.Fatalf("failed to put data to cassandra:%v", err)
 	}
 	err = e2eutil.MakeBackup(testF.KubeCli, testClus.Namespace, testClus.Name)
 	if err != nil {
@@ -212,7 +212,7 @@ func testRestoreWithBackupPolicy(t *testing.T, bp *api.BackupPolicy) {
 	}
 
 	// create new cluster to restore from backup
-	// Restore the etcd cluster of the same name:
+	// Restore the cassandra cluster of the same name:
 	// - use the name already generated. We don't need to regenerate again.
 	// - set BackupClusterName to the same name in RestorePolicy.
 	// Then operator will use the existing backup in the same storage and
@@ -385,14 +385,14 @@ func testDisasterRecoveryWithBackupPolicy(t *testing.T, bp *api.BackupPolicy) {
 		t.Fatalf("failed to create backup pod: %v", err)
 	}
 
-	// write data to etcd and make a backup
+	// write data to cassandra and make a backup
 	pod, err := testF.KubeCli.CoreV1().Pods(testF.KubeNS).Get(names[0], metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("failed to get backup pod: %v", err)
 	}
 	err = e2eutil.PutDataToEtcd(fmt.Sprintf("http://%s:2379", pod.Status.PodIP))
 	if err != nil {
-		t.Fatalf("failed to put data to etcd: %v", err)
+		t.Fatalf("failed to put data to cassandra: %v", err)
 	}
 	err = e2eutil.MakeBackup(testF.KubeCli, testClus.Namespace, testClus.Name)
 	if err != nil {

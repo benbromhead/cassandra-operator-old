@@ -24,7 +24,7 @@ import (
 
 const (
 	//defaultBaseImage = "quay.io/instaclustr/cassandra"
-	defaultBaseImage = "instaclustr.com/cassandra"
+	defaultBaseImage = "gcr.io/kubernetesdev-183419/cassandra"
 	defaultVersion   = "3.11"
 )
 
@@ -40,7 +40,7 @@ type CassandraClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	// Standard list metadata
 	// More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
-	metav1.ListMeta                    `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []CassandraCluster `json:"items"`
 }
 

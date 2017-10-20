@@ -19,10 +19,12 @@ jobs:
     steps:
       - run:
           name: Setup GO directories
-          command: mkdir -p /go/src/github.com/benbromhead/ && mkdir -p /go/bin && mkdir -p /go/pkg
+          command: mkdir -p /go/src/github.com/benbromhead/ && mkdir -p /go/bin && mkdir -p /go/pkg && mkdir -p /usr/lib/go-1.7/bin
       - run:
           name: Setup gobin
-          command: echo 'export PATH="$PATH:/go/bin"' >> $BASH_ENV
+          command: |
+            echo 'export PATH="$PATH:/go/bin"' >> $BASH_ENV
+            echo 'export PATH="$PATH:/usr/lib/go-1.7/bin"' >> $BASH_ENV
       - checkout
       - setup_remote_docker
       - run:

@@ -16,8 +16,8 @@ jobs:
           name: Install dependencies
           command: apt-get -y install golang docker software-properties-common python-software-properties
       - run:
-        name: Install Glide
-        command: add-apt-repository -y ppa:masterminds/glide && apt-get -y update && apt-get -y install glide
+          name: Install Glide
+          command: add-apt-repository -y ppa:masterminds/glide && apt-get -y update && apt-get -y install glide
       - restore_cache:
           keys:
               - glide-cache-{{ checksum "glide.lock" }}

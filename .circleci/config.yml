@@ -6,7 +6,7 @@ jobs:
   build:
     docker:
       # specify the version
-      - image: google/cloud-sdk:latest
+      - image: google/cloud-sdk
         auth:
         #Put the contents of keyfile.json into an environment variable for the build called GCR_CREDS, which is then passed in.
           username: _json_key

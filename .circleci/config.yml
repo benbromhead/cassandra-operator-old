@@ -7,13 +7,27 @@ jobs:
     docker:
       # specify the version
       - image: google/cloud-sdk:latest
+        auth:
+        #Put the contents of keyfile.json into an environment variable for the build called GCR_CREDS, which is then passed in.
+          username: _json_key
+          password: $GOOGLE_AUTH
     environment:
-      GOPATH: $HOME/.go_project
-      PATH: $PATH:$HOME/.go_workspace/bin
+      GOPATH: /go
+      GOBIN: /go/bin
+      PATH: $PATH:$HOME/go/bin
     working_directory: /go/src/github.com/benbromhead/cassandra-operator
     steps:
+      - run:
+          name: Setup GO directories
+          command: mkdir -p /go/src/github.com/benbromhead/
       - checkout
       - setup_remote_docker
+      - run:
+         name: Dump Google Cloud Credentials to file
+         command: echo ${GOOGLE_AUTH} > ${HOME}/gcp-key.json
+       - run:
+         name: Setup Google Cloud
+         command: gcloud auth activate-service-account --key-file ${HOME}/gcp-key.json && gcloud --quiet config set project ${GOOGLE_PROJECT_ID} && gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
       - run:
           name: Install dependencies
           command: apt-get -y install golang docker

@@ -11,10 +11,10 @@ jobs:
         #Put the contents of keyfile.json into an environment variable for the build called GCR_CREDS, which is then passed in.
           username: _json_key
           password: $GOOGLE_AUTH
-      environment:
-        GOPATH: /go
-        GOBIN: /go/bin
-        PATH: $PATH:$HOME/go/bin
+        environment:
+          GOPATH: /go
+          GOBIN: /go/bin
+          PATH: $PATH:$HOME/go/bin
     working_directory: /go/src/github.com/benbromhead/cassandra-operator
     steps:
       - run:

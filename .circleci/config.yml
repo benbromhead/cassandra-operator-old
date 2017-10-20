@@ -1,0 +1,37 @@
+# Golang CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-go/ for more details
+version: 2
+jobs:
+  build:
+    docker:
+      # specify the version
+      - image: circleci/golang:1.8
+
+    working_directory: /go/src/github.com/benbromhead/cassandra-operator
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Install dependencies
+          command: apt install golang docker
+      - restore_cache:
+          keys:
+              - glide-cache-{{ checksum "glide.lock" }}
+      - run:
+          name: Install dependencies if not cached
+          command: |
+              if [ -d ./vendor ]; then
+                  echo "vendor directory found"
+              else
+                  echo "vendor directory not found"
+                  sudo apt-get install -y curl
+                  curl https://glide.sh/get | sh
+                  glide install
+              fi
+      - save_cache:
+          key: glide-cache-{{ checksum "glide.lock" }}
+          paths:
+              - vendor
+        # specify any bash command here prefixed with `run: `
+      - run: go test -v ./test/e2e/ --kubeconfig "$HOME/.kube/config" --operator-image="$IMAGE"

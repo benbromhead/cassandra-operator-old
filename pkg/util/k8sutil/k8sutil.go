@@ -26,7 +26,7 @@ import (
 	"github.com/benbromhead/cassandra-operator/pkg/util/cassandrautil"
 	"github.com/benbromhead/cassandra-operator/pkg/util/retryutil"
 
-	"github.com/coreos/etcd-operator/pkg/backup/backupapi"
+	//"github.com/coreos/etcd-operator/pkg/backup/backupapi"
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,6 +39,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // for gcp auth
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	//"github.com/coreos/etcd-operator/pkg/backup/backupapi"
 )
 
 const (
@@ -74,33 +75,33 @@ func GetPodNames(pods []*v1.Pod) []string {
 	return res
 }
 
-func makeRestoreInitContainers(backupAddr, token, baseImage, version string, m *cassandrautil.Member) []v1.Container {
-	return []v1.Container{
-		{
-			Name:  "fetch-backup",
-			Image: "tutum/curl",
-			Command: []string{
-				"/bin/sh", "-ec",
-				fmt.Sprintf("curl -o %s %s", "backupFile", backupapi.NewBackupURL("http", backupAddr, version, -1)),
-			},
-			VolumeMounts: cassandraVolumeMounts(),
-		},
-		{
-			Name:  "restore-datadir",
-			Image: ImageName(baseImage, version),
-			Command: []string{
-				"/bin/sh", "-ec",
-				fmt.Sprintf("ETCDCTL_API=3 etcdctl snapshot restore %[1]s"+
-					" --name %[2]s"+
-					" --initial-cluster %[2]s=%[3]s"+
-					" --initial-cluster-token %[4]s"+
-					" --initial-advertise-peer-urls %[3]s"+
-					" --data-dir %[5]s", "backupFile", m.Name, m.PeerURL(), token, dataDir),
-			},
-			VolumeMounts: cassandraVolumeMounts(),
-		},
-	}
-}
+//func makeRestoreInitContainers(backupAddr, token, baseImage, version string, m *cassandrautil.Member) []v1.Container {
+//	return []v1.Container{
+//		{
+//			Name:  "fetch-backup",
+//			Image: "tutum/curl",
+//			Command: []string{
+//				"/bin/sh", "-ec",
+//				fmt.Sprintf("curl -o %s %s", "backupFile", backupapi.NewBackupURL("http", backupAddr, version, -1)),
+//			},
+//			VolumeMounts: cassandraVolumeMounts(),
+//		},
+//		{
+//			Name:  "restore-datadir",
+//			Image: ImageName(baseImage, version),
+//			Command: []string{
+//				"/bin/sh", "-ec",
+//				fmt.Sprintf("ETCDCTL_API=3 etcdctl snapshot restore %[1]s"+
+//					" --name %[2]s"+
+//					" --initial-cluster %[2]s=%[3]s"+
+//					" --initial-cluster-token %[4]s"+
+//					" --initial-advertise-peer-urls %[3]s"+
+//					" --data-dir %[5]s", "backupFile", m.Name, m.PeerURL(), token, dataDir),
+//			},
+//			VolumeMounts: cassandraVolumeMounts(),
+//		},
+//	}
+//}
 
 func ImageName(baseImage, version string) string {
 	return fmt.Sprintf("%s:%v", baseImage, version)
@@ -202,10 +203,10 @@ func newEtcdServiceManifest(svcName, clusterName, clusterIP string, ports []v1.S
 	return svc
 }
 
-func AddRecoveryToPod(pod *v1.Pod, clusterName, token string, m *cassandrautil.Member, cs api.ClusterSpec) {
-	pod.Spec.InitContainers = makeRestoreInitContainers(
-		BackupServiceAddr(clusterName), token, cs.BaseImage, cs.Version, m)
-}
+//func AddRecoveryToPod(pod *v1.Pod, clusterName, token string, m *cassandrautil.Member, cs api.ClusterSpec) {
+//	pod.Spec.InitContainers = makeRestoreInitContainers(
+//		BackupServiceAddr(clusterName), token, cs.BaseImage, cs.Version, m)
+//}
 
 func addOwnerRefToObject(o metav1.Object, r metav1.OwnerReference) {
 	o.SetOwnerReferences(append(o.GetOwnerReferences(), r))

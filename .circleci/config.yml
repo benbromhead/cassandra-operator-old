@@ -14,10 +14,10 @@ jobs:
       - setup_remote_docker
       - run:
           name: Install dependencies
-          command: apt-get -y install golang docker software-properties-common python-software-properties
+          command: apt-get -y install golang docker
       - run:
           name: Install Glide
-          command: add-apt-repository -y ppa:masterminds/glide && apt-get -y update && apt-get -y install glide
+          command: curl https://glide.sh/get | sh
       - restore_cache:
           keys:
               - glide-cache-{{ checksum "glide.lock" }}

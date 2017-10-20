@@ -31,16 +31,11 @@ jobs:
           name: Install dependencies
           command: apt-get -y install golang docker
       - run:
+          name: Setup gobin
+          command: mkdir -p /go/bin && export PATH="$PATH:/go/bin"
+      - run:
           name: Install dependencies if not cached
-          command: |
-              if [ -d ./vendor ]; then
-                  echo "vendor directory found"
-              else
-                  echo "vendor directory not found"
-                  sudo apt-get install -y curl
-                  curl https://glide.sh/get | sh
-                  glide install
-              fi
+          command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install
         # specify any bash command here prefixed with `run: `
       - run: go test -v ./test/e2e/ --kubeconfig "$HOME/.kube/config" --operator-image="$IMAGE"
 workflows:

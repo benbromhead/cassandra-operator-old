@@ -40,7 +40,6 @@ jobs:
       - run:
           name: Install dependencies if not cached
           command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install --strip-vendor
-         specify any bash command here prefixed with `run: `
       - run: go test -v ./test/e2e/ --kubeconfig "$HOME/.kube/config" --operator-image="$IMAGE"
 workflows:
   version: 2

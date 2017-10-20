@@ -7,7 +7,9 @@ jobs:
     docker:
       # specify the version
       - image: google/cloud-sdk:latest
-
+    environment:
+      GOPATH: $HOME/.go_project
+      PATH: $PATH:$HOME/.go_workspace/bin
     working_directory: /go/src/github.com/benbromhead/cassandra-operator
     steps:
       - checkout

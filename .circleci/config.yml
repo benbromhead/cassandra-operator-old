@@ -14,11 +14,15 @@ jobs:
         environment:
           GOPATH: /go
           GOBIN: /go/bin
+          BASH_ENV: ~/.bashrc
     working_directory: /go/src/github.com/benbromhead/cassandra-operator
     steps:
       - run:
           name: Setup GO directories
-          command: mkdir -p /go/src/github.com/benbromhead/
+          command: mkdir -p /go/src/github.com/benbromhead/ && mkdir -p /go/bin
+      - run:
+          name: Setup gobin
+          command: echo 'export PATH="$PATH:/go/bin"' >> $BASH_ENV
       - checkout
       - setup_remote_docker
       - run:
@@ -30,9 +34,7 @@ jobs:
       - run:
           name: Install dependencies
           command: apt-get -y install golang docker
-      - run:
-          name: Setup gobin
-          command: mkdir -p /go/bin && export PATH="$PATH:/go/bin"
+
       - run:
           name: Install dependencies if not cached
           command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install

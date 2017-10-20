@@ -19,7 +19,7 @@ jobs:
     steps:
       - run:
           name: Setup GO directories
-          command: mkdir -p /go/src/github.com/benbromhead/ && mkdir -p /go/bin
+          command: mkdir -p /go/src/github.com/benbromhead/ && mkdir -p /go/bin && mkdir -p /go/pkg
       - run:
           name: Setup gobin
           command: echo 'export PATH="$PATH:/go/bin"' >> $BASH_ENV
@@ -33,12 +33,14 @@ jobs:
           command: gcloud auth activate-service-account --key-file ${HOME}/gcp-key.json && gcloud --quiet config set project ${GOOGLE_PROJECT_ID} && gcloud --quiet config set compute/zone ${GOOGLE_COMPUTE_ZONE}
       - run:
           name: Install dependencies
-          command: apt-get -y install golang docker
-
+          command: |
+            echo "deb http://ftp.debian.org/debian jessie-backports main" >> /etc/apt/sources.list.d/backports.list
+            apt-get update
+            apt-get -y install golang-1.7 docker
       - run:
           name: Install dependencies if not cached
-          command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install
-        # specify any bash command here prefixed with `run: `
+          command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install --strip-vendor
+         specify any bash command here prefixed with `run: `
       - run: go test -v ./test/e2e/ --kubeconfig "$HOME/.kube/config" --operator-image="$IMAGE"
 workflows:
   version: 2

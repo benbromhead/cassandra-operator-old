@@ -14,7 +14,7 @@ jobs:
         environment:
           GOPATH: /go
           GOBIN: /go/bin
-          BASH_ENV: ~/.bashrc
+          BASH_ENV: /root/.bashrc
     working_directory: /go/src/github.com/benbromhead/cassandra-operator
     steps:
       - run:

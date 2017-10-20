@@ -6,7 +6,7 @@ jobs:
   build:
     docker:
       # specify the version
-      - image: circleci/golang:1.8
+      - image: google/cloud-sdk:latest
 
     working_directory: /go/src/github.com/benbromhead/cassandra-operator
     steps:
@@ -14,7 +14,10 @@ jobs:
       - setup_remote_docker
       - run:
           name: Install dependencies
-          command: sudo apt-get -y install golang docker
+          command: apt-get -y install golang docker software-properties-common python-software-properties
+      - run:
+        name: Install Glide
+        command: add-apt-repository -y ppa:masterminds/glide && apt-get -y update && apt-get -y install glide
       - restore_cache:
           keys:
               - glide-cache-{{ checksum "glide.lock" }}
@@ -35,3 +38,8 @@ jobs:
               - vendor
         # specify any bash command here prefixed with `run: `
       - run: go test -v ./test/e2e/ --kubeconfig "$HOME/.kube/config" --operator-image="$IMAGE"
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build

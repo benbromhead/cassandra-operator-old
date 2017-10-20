@@ -14,7 +14,7 @@ jobs:
       - setup_remote_docker
       - run:
           name: Install dependencies
-          command: apt-get install golang docker
+          command: sudo apt-get -y install golang docker
       - restore_cache:
           keys:
               - glide-cache-{{ checksum "glide.lock" }}

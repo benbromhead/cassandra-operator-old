@@ -44,7 +44,7 @@ jobs:
           command: |
              echo "deb http://ftp.debian.org/debian jessie-backports main" >> /etc/apt/sources.list.d/backports.list
              apt-get update
-             apt-get -y install docker.io
+             apt-get -y --no-install-recommends install docker.io
       - run:
           name: Install dependencies if not cached
           command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install --strip-vendor

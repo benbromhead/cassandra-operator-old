@@ -33,7 +33,7 @@ See the [Resources and Labels](./doc/user/resource_labels.md) doc for an overvie
 ## Requirements
 
 - Kubernetes 1.7+
-- Cassandra 3.0+
+- Cassandra 3.11+
 
 ## Deploy Cassandra operator
 
@@ -76,18 +76,18 @@ Modify the file and change `size` from 3 to 5.
 
 ```
 $ cat example/example-Cassandra-cluster.yaml
-apiVersion: "Cassandra.database.coreos.com/v1beta2"
+apiVersion: "cassandra.database.instaclustr.com/v1beta2"
 kind: "CassandraCluster"
 metadata:
-  name: "example-Cassandra-cluster"
+  name: "example-cassandra-cluster"
 spec:
   size: 5
-  version: "3.1.8"
+  version: "3.11.0"
 ```
 
 Apply the size change to the cluster CR:
 ```
-$ kubectl apply -f example/example-Cassandra-cluster.yaml
+$ kubectl apply -f example/example-cassandra-cluster.yaml
 ```
 The Cassandra cluster will scale to 5 members (5 pods):
 ```
@@ -134,7 +134,7 @@ Let's walk through in the following steps.
 Create an Cassandra cluster:
 
 ```
-$ kubectl create -f example/example-Cassandra-cluster.yaml
+$ kubectl create -f example/example-cassandra-cluster.yaml
 ```
 
 Wait until all three members are up. Simulate a member failure by deleting a pod:
@@ -143,7 +143,7 @@ Wait until all three members are up. Simulate a member failure by deleting a pod
 $ kubectl delete pod example-Cassandra-cluster-0000 --now
 ```
 
-The Cassandra operator will recover the failure by creating a new pod `example-Cassandra-cluster-0003`:
+The Cassandra operator will recover the failure by creating a new pod `example-cassandra-cluster-0003`:
 
 ```bash
 $ kubectl get pods
@@ -171,17 +171,17 @@ Wait until all three members are up. Then
 
 ```bash
 $ kubectl delete -f example/deployment.yaml
-deployment "Cassandra-operator" deleted
+deployment "cassandra-operator" deleted
 
 $ kubectl delete pod example-Cassandra-cluster-0000 --now
-pod "example-Cassandra-cluster-0000" deleted
+pod "example-cassandra-cluster-0000" deleted
 ```
 
 Then restart the Cassandra operator. It should recover itself and the Cassandra clusters it manages.
 
 ```bash
 $ kubectl create -f example/deployment.yaml
-deployment "Cassandra-operator" created
+deployment "cassandra-operator" created
 
 $ kubectl get pods
 NAME                            READY     STATUS    RESTARTS   AGE

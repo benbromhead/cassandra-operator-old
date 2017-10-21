@@ -6,11 +6,11 @@ jobs:
   build:
     docker:
       # specify the version
-      - image: google/cloud-sdk
-#        auth:
-#        #Put the contents of keyfile.json into an environment variable for the build called GCR_CREDS, which is then passed in.
-#          username: _json_key
-#          password: $GOOGLE_AUTH
+      - image: gcr.io/kubernetesdev-183419/cloud-sdk
+        auth:
+        #Put the contents of keyfile.json into an environment variable for the build called GCR_CREDS, which is then passed in.
+          username: _json_key
+          password: $GOOGLE_AUTH
         environment:
           GOPATH: /go
           GOBIN: /go/bin
@@ -45,7 +45,7 @@ jobs:
       - run:
           name: Install dependencies if not cached
           command: apt-get install -y curl && curl https://glide.sh/get | sh && glide install --strip-vendor
-      - run: go test -v ./test/e2e/ --kubeconfig "$HOME/.kube/config" --operator-image="$IMAGE"
+      - run: ./hack/build/operator/build
 workflows:
   version: 2
   build_and_test:

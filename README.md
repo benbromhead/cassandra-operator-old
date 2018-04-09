@@ -1,4 +1,7 @@
-# Cassandra operator
+# Deprecated 
+This operator is no longer maintained and has been deprecated in favour of the [Instaclustr cassandra-operator](https://github.com/instaclustr/cassandra-operator). 
+
+## Cassandra operator
 Build [![CircleCI](https://circleci.com/gh/benbromhead/cassandra-operator/tree/master.svg?style=svg)](https://circleci.com/gh/benbromhead/cassandra-operator/tree/master)
 Test 
 
